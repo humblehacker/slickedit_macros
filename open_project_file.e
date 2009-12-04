@@ -361,6 +361,29 @@ void opf_files.on_change(int reason,int index)
    }
 }
 
+_str opf_make_regex( _str pattern )
+{
+   _str regex = ".*";
+   _str ch;
+   int i;
+   int last = length(pattern);
+   for (i = 1; i <= last; ++i) {
+      regex :+= substr(pattern, i, 1);
+      regex :+= ".*";
+   }
+   return lowcase(regex);
+}
+
+int opf_string_match2( _str pattern, _str str )
+{
+   _str regex = opf_make_regex(pattern);
+   message(regex);
+   if (pos( regex, str, 1, 'U' ) == 0) {
+      return 0;
+   }
+   return 1;
+}
+
 int opf_string_match( _str pattern, _str str )
 {
    _str regex, string, word, temp;
@@ -438,7 +461,7 @@ void opf_update_tree( _str pattern )
          continue;
       }
 
-      if (!opf_string_match( pattern, opf_files._TreeGetCaption( idx ) )) {
+      if (!opf_string_match2( pattern, opf_files._TreeGetCaption( idx ) )) {
          opf_files._TreeSetInfo( idx, -1, -1, -1, TREENODE_HIDDEN );
       } else {
          opf_files._TreeSetInfo( idx, -1, -1, -1, 0 );
