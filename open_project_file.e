@@ -355,6 +355,10 @@ void opf_files.on_change(int reason,int index)
          name = proj :+ name;
       }
 
+      // quote name if it includes spaces
+      if (pos( " ", name, 1, 'U' ) != 0)
+         name = "\""name"\"";
+
       form = p_active_form;
       e( name );
       form._delete_window();
