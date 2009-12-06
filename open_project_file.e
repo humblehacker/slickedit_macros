@@ -377,7 +377,6 @@ _str opf_make_regex( _str pattern )
 int opf_string_match2( _str pattern, _str str )
 {
    _str regex = opf_make_regex(pattern);
-   message(regex);
    if (pos( regex, str, 1, 'U' ) == 0) {
       return 0;
    }
