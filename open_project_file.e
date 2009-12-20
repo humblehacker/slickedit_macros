@@ -1,16 +1,16 @@
 //
 // Copyright (c) 2003-2008 Alexander Sandler
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -18,12 +18,12 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-// 
+//
 // 05/11/2008 - Version 1.0.9
 // This version adds _TreeRefresh() call at the end of opf_update_tree(). This fixes
 // a problem with trees in SE that are not automatically updated after a change has
 // been made.
-// 
+//
 
 #include "slick.sh"
 
@@ -95,7 +95,48 @@ _form open_project_file {
       p_y=304;
       p_eventtab2=_ul2_tree;
    }
+   _label opf_status1 {
+      p_alignment=AL_LEFT;
+      p_auto_size=false;
+      p_backcolor=0x80000008;
+      p_border_style=BDS_NONE;
+      p_caption='';
+      p_font_bold=false;
+      p_font_italic=false;
+      p_font_name='Tahoma';
+      p_font_size=8;
+      p_font_underline=false;
+      p_forecolor=0x80000008;
+      p_height=234;
+      p_tab_index=2;
+      p_width=5542;
+      p_word_wrap=false;
+      p_x=66;
+      p_y=6424;
+   }
+   _label opf_status2 {
+      p_alignment=AL_LEFT;
+      p_auto_size=false;
+      p_backcolor=0x80000008;
+      p_border_style=BDS_NONE;
+      p_caption='';
+      p_font_bold=false;
+      p_font_italic=false;
+      p_font_name='Tahoma';
+      p_font_size=8;
+      p_font_underline=false;
+      p_forecolor=0x80000008;
+      p_height=234;
+      p_tab_index=2;
+      p_width=5542;
+      p_word_wrap=false;
+      p_x=66+5542;
+      p_y=6424;
+   }
 }
+
+#define OPF_EXACT_MATCH   1
+#define OPF_PATTERN_MATCH 2
 
 static int opf_tree_font  = CFG_DIALOG;
 static int opf_filt_font  = CFG_DIALOG;
@@ -232,16 +273,18 @@ void parse_project( int xml, int index, _str basic_name )
 
    idx = index;
    int idx2;
- 
+   int new_idx;
+
    do {
       if ((_xmlcfg_get_name( xml, idx ) == "F") && (_xmlcfg_get_attribute( xml, idx, "N", "" ) != "")) {
          name = _xmlcfg_get_attribute( xml, idx, "N", "" );
-         _TreeAddItem( 0, 
-                       name, 
-                       TREE_ADD_AS_CHILD, 
-                       _pic_doc_w,
-                       _pic_doc_w,
-                       -1 );
+         new_idx = _TreeAddItem( 0,
+                                 name,
+                                 TREE_ADD_AS_CHILD,
+                                 _pic_doc_w,
+                                 _pic_doc_w,
+                                 -1 );
+         _TreeSetUserInfo(new_idx, OPF_EXACT_MATCH);
       }
 
       child = _xmlcfg_get_first_child( xml, idx );
@@ -287,6 +330,78 @@ void opf_file_name.on_create()
    opf_setEditFont( opf_file_name, opf_filt_font );
 }
 
+void tree_reset_moreflag(int ItemIndex, int flag)
+{
+   int ShowChildren, NonCurrentBMIndex, CurrentBMIndex, lineNumber;
+   int currentFlags;
+   opf_files._TreeGetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
+                          CurrentBMIndex, currentFlags, lineNumber);
+   currentFlags &= ~flag;
+   opf_files._TreeSetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
+                          CurrentBMIndex, currentFlags);
+}
+
+void tree_set_moreflag(int ItemIndex, int flag)
+{
+   int ShowChildren, NonCurrentBMIndex, CurrentBMIndex, lineNumber;
+   int currentFlags;
+   opf_files._TreeGetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
+                          CurrentBMIndex, currentFlags, lineNumber);
+   currentFlags |= flag;
+   opf_files._TreeSetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
+                          CurrentBMIndex, currentFlags);
+}
+
+static int hide_flag = TREENODE_HIDDEN;
+
+void tree_hide_node(int idx)
+{
+   tree_set_moreflag(idx, hide_flag);
+}
+
+void tree_show_node(int idx)
+{
+   tree_reset_moreflag(idx, hide_flag);
+}
+
+void double_tree()
+{
+   _str name;
+   int count = opf_files._TreeGetNumChildren(0);
+   int new_idx, userinfo, total = 0;
+   int idx = 0;
+   for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
+        idx = opf_files._TreeGetNextIndex( idx, "H" )) {
+
+      userinfo = _TreeGetUserInfo(idx);
+
+      // skip new items
+      if (userinfo == OPF_PATTERN_MATCH) {
+         continue;
+      }
+
+      ++total;
+
+      // hide original items
+      tree_hide_node(idx);
+      tree_set_moreflag(idx, TREENODE_BOLD);
+
+      // get caption
+      name = _TreeGetCaption(idx);
+
+      // add a copy and mark PATTERN_MATCH
+      new_idx = _TreeAddItem( 0,
+                              name,
+                              TREE_ADD_AS_CHILD,
+                              _pic_doc_w,
+                              _pic_doc_w,
+                              -1 );
+      tree_show_node(new_idx);
+      _TreeSetUserInfo(new_idx, OPF_PATTERN_MATCH);
+   }
+   opf_status2.p_caption = total " of " total " matched";
+}
+
 void opf_files.on_create()
 {
    int xml_id = 0;
@@ -301,6 +416,7 @@ void opf_files.on_create()
    no_files = project_find_files( xml_id, 0 );
    parse_project( xml_id, no_files, "" );
    sort_tree( 0 );
+   double_tree();
 
    forget_project( xml_id );
 
@@ -314,13 +430,43 @@ void opf_files.on_create()
 
 void open_project_file.on_resize()
 {
-   int clientwidth      = p_active_form.p_width;
-   int clientheight     = p_active_form.p_height;
+   /*
+          +--------------------------------+
+          |          opf_file_name         |   } fixed height
+          +--------------------------------+
+          |                                |   \
+          |                                |    |
+          |            opf_files           |    |  variable height
+          |                                |    |
+          |                                |   /
+          +--------------------+-----------+
+          |    opf_status1     |opf_status2|   } fixed height
+          +--------------------+-----------+
 
-   opf_files.p_width      = clientwidth - 260;
-   opf_file_name.p_width  = opf_files.p_width + 20;
+           \__________________/ \_________/
+                2/3 width        1/3 width
+   */
 
-   opf_files.p_height     = clientheight - opf_files.p_y - 440;
+   int clientwidth  = p_active_form.p_width;
+   int clientheight = p_active_form.p_height;
+   int hpad         = opf_file_name.p_x;
+   int vpad         = opf_file_name.p_y;
+   int fnpad        = 20; // Since the right inner border of a
+   // sunken field is more pronounced, we align to this instead of
+   // the outer border. Hence, the extra 20 units.
+
+   // Calculate horizontal dimensions
+   opf_files.p_width     = clientwidth - hpad * 2;
+   opf_file_name.p_width = opf_files.p_width + fnpad;
+   opf_status1.p_width   = (opf_files.p_width * 2/3) - hpad;
+   opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
+   opf_status2.p_x       = opf_status1.p_width + hpad * 2;
+
+   // Calculate vertical dimensions
+   opf_files.p_height = clientheight - vpad * 4 -
+                        opf_file_name.p_height - opf_status1.p_height;
+   opf_status1.p_y    = opf_files.p_y + opf_files.p_height + vpad;
+   opf_status2.p_y    = opf_status1.p_y;
 }
 
 void opf_files.on_destroy()
@@ -365,6 +511,8 @@ void opf_files.on_change(int reason,int index)
    }
 }
 
+static _str regex_chars = "^$.+*?{}[]()\\|";
+
 _str opf_make_regex( _str pattern )
 {
    _str regex = ".*";
@@ -372,19 +520,24 @@ _str opf_make_regex( _str pattern )
    int i;
    int last = length(pattern);
    for (i = 1; i <= last; ++i) {
-      regex :+= substr(pattern, i, 1);
+      ch = substr(pattern, i, 1);
+      if (pos( ch, regex_chars ) !=0) // escape regex characters
+         regex :+= "\\"
+      regex :+= ch;
       regex :+= ".*";
    }
    return lowcase(regex);
 }
 
-int opf_string_match2( _str pattern, _str str )
+boolean opf_string_match2( _str pattern, _str str, int type )
 {
+   boolean exact_match = pos( pattern, str, 1, 'I' ) != 0;
+   if (type == OPF_EXACT_MATCH)
+      return exact_match;
+
    _str regex = opf_make_regex(pattern);
-   if (pos( regex, str, 1, 'U' ) == 0) {
-      return 0;
-   }
-   return 1;
+   opf_status1.p_caption = regex;
+   return !exact_match && pos( regex, str, 1, 'UI' ) != 0;
 }
 
 int opf_string_match( _str pattern, _str str )
@@ -412,13 +565,13 @@ int opf_string_match( _str pattern, _str str )
    regex = translate( regex, ' ', '/' );
 //   regex = _escape_re_chars( regex );
 //   regex = stranslate( regex, "\\.", "." );
-   
+
    // looking for occurrences of _all_ words in string...
    index = 0;
    found = 0;
 
-   // Last word in the regex expected to be file name. We first check if last word 
-   // in regex and string matches, and then we check the rest of the words against 
+   // Last word in the regex expected to be file name. We first check if last word
+   // in regex and string matches, and then we check the rest of the words against
    // the path.
    word = strip_last_word( regex );
    str = strip_filename( string, "P" );
@@ -452,26 +605,36 @@ int opf_string_match( _str pattern, _str str )
 
 void opf_update_tree( _str pattern )
 {
-   int idx = 0;
+   int type;
+   _str caption;
+   int idx = 0, first_visible = -1, total_visible = 0, total = 0;
+   for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
+        idx = opf_files._TreeGetNextIndex( idx, "H" )) {
 
-   do {
-      idx = opf_files._TreeGetNextIndex( idx, "H" );
-      if (idx < 0) {
-         break;
-      }
-
-      if (opf_files._TreeGetCaption( idx ) == "") {
+      caption = opf_files._TreeGetCaption( idx );
+      if ( caption == "") {
          continue;
       }
 
-      if (!opf_string_match2( pattern, opf_files._TreeGetCaption( idx ) )) {
-         opf_files._TreeSetInfo( idx, -1, -1, -1, TREENODE_HIDDEN );
-      } else {
-         opf_files._TreeSetInfo( idx, -1, -1, -1, 0 );
-      }
-   } while (1);
+      ++total;
 
+      type = opf_files._TreeGetUserInfo(idx);
+      if (opf_string_match2( pattern, caption, type )) {
+         tree_show_node(idx);
+         ++total_visible;
+         if (first_visible == -1)
+            first_visible = idx;
+      } else {
+         tree_hide_node(idx);
+      }
+   }
+
+   if (first_visible != -1) {
+      opf_files._TreeScroll( first_visible );
+      opf_files._TreeSetCurIndex( first_visible );
+   }
    opf_files._TreeRefresh();
+   opf_status2.p_caption = total_visible " of " total/2 " matched";
 }
 
 void open_project_file.'DOWN'()
