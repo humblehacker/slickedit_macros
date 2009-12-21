@@ -26,7 +26,7 @@
 //
 
 #include "slick.sh"
-#import "form_open_project_file.e"
+#include "form_open_project_file.e"
 #import "editfont.e"
 
 #pragma option( strict, on )
@@ -36,10 +36,25 @@ defeventtab open_project_file;
 #define OPF_EXACT_MATCH   1
 #define OPF_PATTERN_MATCH 2
 
-static int opf_tree_font  = CFG_DIALOG;
-static int opf_filt_font  = CFG_DIALOG;
+static int opf_tree_font       = CFG_DIALOG;
+static int opf_filt_font       = CFG_DIALOG;
+static int s_markerType        = -1;
+static int s_mismatchColor     = -1;
+static int s_exactMatchColor   = -1;
+static int s_partialMatchColor = -1;
 
 static int opf_timer_handle = 0;
+
+definit()
+{
+   s_markerType        = _MarkerTypeAlloc();
+   s_mismatchColor     = _AllocColor();
+   s_exactMatchColor   = _AllocColor();
+   s_partialMatchColor = _AllocColor();
+   _default_color( s_mismatchColor,     0xffffff, 0x0000ff, F_BOLD );
+   _default_color( s_exactMatchColor,   0xffffff, _rgb(255,128,0), F_BOLD );
+   _default_color( s_partialMatchColor, 0xffffff, _rgb(128,128,128), F_BOLD );
+}
 
 void close_form()
 {
@@ -117,6 +132,7 @@ void parse_project( int xml, int index, _str basic_name )
                                  _pic_doc_w,
                                  -1 );
          _TreeSetUserInfo(new_idx, OPF_EXACT_MATCH);
+         opf_files2._insert_text(name"\n");
       }
 
       child = _xmlcfg_get_first_child( xml, idx );
@@ -126,6 +142,8 @@ void parse_project( int xml, int index, _str basic_name )
       idx2 = idx;
       idx = _xmlcfg_get_next_sibling( xml, idx );
    } while (idx >= 0);
+   opf_files2.top();
+   opf_files2.refresh();
 }
 
 void sort_tree( int index )
@@ -352,8 +370,11 @@ void opf_files.on_change(int reason,int index)
 
 static _str regex_chars = "^$.+*?{}[]()\\|";
 
-_str opf_make_regex( _str pattern )
+_str opf_make_regex( _str pattern, int type )
 {
+   if (type == OPF_EXACT_MATCH)
+      return pattern;
+
    _str regex = ".*";
    _str ch;
    int i;
@@ -368,13 +389,12 @@ _str opf_make_regex( _str pattern )
    return lowcase(regex);
 }
 
-boolean opf_string_match2( _str pattern, _str str, int type )
+boolean opf_string_match2( _str pattern, _str regex, _str str, int type )
 {
    boolean exact_match = pos( pattern, str, 1, 'I' ) != 0;
    if (type == OPF_EXACT_MATCH)
       return exact_match;
 
-   _str regex = opf_make_regex(pattern);
    opf_status1.p_caption = regex;
    return !exact_match && pos( regex, str, 1, 'UI' ) != 0;
 }
@@ -442,25 +462,35 @@ int opf_string_match( _str pattern, _str str )
    return 0;
 }
 
-void add_html( _str caption, _str pattern, int type )
+void add_html( _str caption, _str pattern, int type, int &offset )
 {
+   int where = 0;
+   int len = length(pattern);
+   int color = 0;
    if (type == OPF_EXACT_MATCH)
    {
-      int len = length(pattern);
-      _str before, after;
-      int where = pos(pattern, caption, 1, "I");
-      before = substr(caption, 1, where-1);
-      after  = substr(caption, where+len);
-      caption = before"<b>"substr(caption,where,len)"</b>"after;
+      where = pos(pattern, caption, 1, "I") - 1;
+      color = s_exactMatchColor;
    }
-   opf_files2.p_text :+= "<tt><a href=\"file://"caption"\">"caption"</a></tt><br>";
+   else
+   {
+      pattern = substr(pattern, 3, len-4);
+      where = pos(pattern, caption, 1, "UI") - 1;
+      int start = pos('S0');
+      len = pos('');
+      color = s_partialMatchColor;
+   }
+   opf_files2._insert_text(caption"\n");
+   int marker = _StreamMarkerAdd(opf_files2, offset+where, len, true, 0, s_markerType, '');
+   _StreamMarkerSetTextColor( marker, color );
+   offset += length(caption)+1;
 }
 
 void opf_update_tree( _str pattern )
 {
-   opf_files2.p_text = "";
-   int type;
-   _str caption, html;
+   opf_files2._delete_text(-2);
+   int type, offset = 0;
+   _str caption, html, regex;
    int idx = 0, first_visible = -1, total_visible = 0, total = 0;
    for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
         idx = opf_files._TreeGetNextIndex( idx, "H" )) {
@@ -473,10 +503,11 @@ void opf_update_tree( _str pattern )
       ++total;
 
       type = opf_files._TreeGetUserInfo(idx);
-      if (opf_string_match2( pattern, caption, type )) {
-         add_html(caption, pattern, type);
-         tree_show_node(idx);
+      regex = opf_make_regex(pattern, type);
+      if (opf_string_match2( pattern, regex, caption, type )) {
          ++total_visible;
+         add_html(caption, regex, type, offset);
+         tree_show_node(idx);
          if (first_visible == -1)
             first_visible = idx;
       } else {
@@ -490,6 +521,8 @@ void opf_update_tree( _str pattern )
    }
    opf_files._TreeRefresh();
    opf_status2.p_caption = total_visible " of " total/2 " matched";
+   opf_files2.top();
+   opf_files2.refresh();
 }
 
 void open_project_file.'DOWN'()
