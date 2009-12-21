@@ -171,6 +171,7 @@ void open_project_file.on_load()
       close_form();
       return;
    }
+   opf_files2._set_focus();
 }
 
 void opf_file_name.on_create()
@@ -248,6 +249,12 @@ void double_tree()
       _TreeSetUserInfo(new_idx, OPF_PATTERN_MATCH);
    }
    opf_status2.p_caption = total " of " total " matched";
+}
+
+void opf_files2.on_create()
+{
+   p_line_numbers_len = 0;
+   p_KeepPictureGutter = false;
 }
 
 void opf_files.on_create()
@@ -364,6 +371,38 @@ void opf_files.on_change(int reason,int index)
       e( name );
       form._delete_window();
    }
+}
+
+void opf_files2.'ENTER'()
+{
+   _str name = opf_files2.get_current_line();
+
+   // If after stripping path filename remains the same, we should append project directory
+   // to filename as the name is relative to project path. Otherwise we should use the name
+   // as is.
+   if ((strip_filename( name, "D" ) == name) || (substr( name, 1, 1 ) :== ".")) {
+      _str proj = _project_get_filename();
+      proj = strip_filename( proj, "N" );
+      name = proj :+ name;
+   }
+
+   // quote name if it includes spaces
+   if (pos( " ", name, 1, 'U' ) != 0)
+      name = "\""name"\"";
+
+   typeless form = p_active_form;
+   e( name );
+   form._delete_window();
+}
+
+static _str get_current_line()
+{
+   select_line();
+   filter_init();
+   _str name;
+   filter_get_string( name );
+   _deselect();
+   return name;
 }
 
 static _str regex_chars = "^$.+*?{}[]()\\|";
