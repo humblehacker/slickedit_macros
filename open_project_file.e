@@ -33,17 +33,17 @@
 
 defeventtab open_project_file;
 
+#define OPF_NO_MATCH      0
 #define OPF_EXACT_MATCH   1
 #define OPF_PATTERN_MATCH 2
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
-static int opf_tree_font       = CFG_DIALOG;
-static int opf_filt_font       = CFG_DIALOG;
-static int s_markerType        = -1;
-static int s_exactMatchColor   = -1;
-static int s_partialMatchColor = -1;
-
-static int opf_timer_handle = 0;
+static int  opf_filt_font       = CFG_DIALOG;
+static int  opf_timer_handle    = 0;
+static int  s_markerType        = -1;
+static int  s_exactMatchColor   = -1;
+static int  s_partialMatchColor = -1;
+static _str s_files[];
 
 definit()
 {
@@ -108,6 +108,7 @@ int project_find_files( int xml, int index )
 
 void parse_project( int xml, int index, _str basic_name )
 {
+   int last=0;
    int idx;
    int child;
    int how;
@@ -123,14 +124,8 @@ void parse_project( int xml, int index, _str basic_name )
    do {
       if ((_xmlcfg_get_name( xml, idx ) == "F") && (_xmlcfg_get_attribute( xml, idx, "N", "" ) != "")) {
          name = _xmlcfg_get_attribute( xml, idx, "N", "" );
-         new_idx = _TreeAddItem( 0,
-                                 name,
-                                 TREE_ADD_AS_CHILD,
-                                 _pic_doc_w,
-                                 _pic_doc_w,
-                                 -1 );
-         _TreeSetUserInfo(new_idx, OPF_EXACT_MATCH);
-         opf_files2._insert_text(name"\n");
+         s_files[last++] = name;
+         opf_files._insert_text(name"\n");
       }
 
       child = _xmlcfg_get_first_child( xml, idx );
@@ -140,20 +135,8 @@ void parse_project( int xml, int index, _str basic_name )
       idx2 = idx;
       idx = _xmlcfg_get_next_sibling( xml, idx );
    } while (idx >= 0);
-   opf_files2.top();
-   opf_files2.refresh();
-}
-
-void sort_tree( int index )
-{
-   if (index < 0) {
-      return;
-   }
-
-   _TreeSortCaption( index, 'P', 'F' );
-
-//   sort_tree( _TreeGetFirstChildIndex( index ) );
-//   sort_tree( _TreeGetNextSiblingIndex( index ) );
+   opf_files.top();
+   opf_files.refresh();
 }
 
 void forget_project( int tree )
@@ -171,7 +154,7 @@ void open_project_file.on_load()
       close_form();
       return;
    }
-   opf_files2._set_focus();
+   opf_files._set_focus();
 }
 
 void opf_file_name.on_create()
@@ -179,86 +162,11 @@ void opf_file_name.on_create()
    setEditFont( opf_file_name, opf_filt_font );
 }
 
-void tree_reset_moreflag(int ItemIndex, int flag)
-{
-   int ShowChildren, NonCurrentBMIndex, CurrentBMIndex, lineNumber;
-   int currentFlags;
-   opf_files._TreeGetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
-                          CurrentBMIndex, currentFlags, lineNumber);
-   currentFlags &= ~flag;
-   opf_files._TreeSetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
-                          CurrentBMIndex, currentFlags);
-}
-
-void tree_set_moreflag(int ItemIndex, int flag)
-{
-   int ShowChildren, NonCurrentBMIndex, CurrentBMIndex, lineNumber;
-   int currentFlags;
-   opf_files._TreeGetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
-                          CurrentBMIndex, currentFlags, lineNumber);
-   currentFlags |= flag;
-   opf_files._TreeSetInfo(ItemIndex, ShowChildren, NonCurrentBMIndex,
-                          CurrentBMIndex, currentFlags);
-}
-
-static int hide_flag = TREENODE_HIDDEN;
-
-void tree_hide_node(int idx)
-{
-   tree_set_moreflag(idx, hide_flag);
-}
-
-void tree_show_node(int idx)
-{
-   tree_reset_moreflag(idx, hide_flag);
-}
-
-void double_tree()
-{
-   _str name;
-   int count = opf_files._TreeGetNumChildren(0);
-   int new_idx, userinfo, total = 0;
-   int idx = 0;
-   for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
-        idx = opf_files._TreeGetNextIndex( idx, "H" )) {
-
-      userinfo = _TreeGetUserInfo(idx);
-
-      // skip new items
-      if (userinfo == OPF_PATTERN_MATCH) {
-         continue;
-      }
-
-      ++total;
-
-      // hide original items
-      tree_hide_node(idx);
-      tree_set_moreflag(idx, TREENODE_BOLD);
-
-      // get caption
-      name = _TreeGetCaption(idx);
-
-      // add a copy and mark PATTERN_MATCH
-      new_idx = _TreeAddItem( 0,
-                              name,
-                              TREE_ADD_AS_CHILD,
-                              _pic_doc_w,
-                              _pic_doc_w,
-                              -1 );
-      tree_show_node(new_idx);
-      _TreeSetUserInfo(new_idx, OPF_PATTERN_MATCH);
-   }
-   opf_status2.p_caption = total " of " total " matched";
-}
-
-void opf_files2.on_create()
+void opf_files.on_create()
 {
    p_line_numbers_len = 0;
    p_KeepPictureGutter = false;
-}
 
-void opf_files.on_create()
-{
    int xml_id = 0;
    int no_files = 0;
    int i;
@@ -270,17 +178,7 @@ void opf_files.on_create()
 
    no_files = project_find_files( xml_id, 0 );
    parse_project( xml_id, no_files, "" );
-   sort_tree( 0 );
-   double_tree();
-
    forget_project( xml_id );
-
-   // Workaround for tree font issue. Credit goes to HS2!
-   setEditFont( opf_files, opf_tree_font );
-
-   _str font_name = '';
-   getEditFont( opf_tree_font, font_name );
-   opf_files.p_font_name = font_name;
 }
 
 void open_project_file.on_resize()
@@ -311,71 +209,24 @@ void open_project_file.on_resize()
    // the outer border. Hence, the extra 20 units.
 
    // Calculate horizontal dimensions
-   opf_files.p_width     = clientwidth - hpad * 2;
-   opf_files2.p_width    = opf_files.p_width;
+   opf_files.p_width    = clientwidth - hpad * 2;
    opf_file_name.p_width = opf_files.p_width + fnpad;
    opf_status1.p_width   = (opf_files.p_width * 2/3) - hpad;
    opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
    opf_status2.p_x       = opf_status1.p_width + hpad * 2;
 
    // Calculate vertical dimensions
-   int varheight       = clientheight - (vpad * 4 +
+   opf_files.p_height = clientheight - (vpad * 4 +
                          opf_file_name.p_height +
                          opf_status1.p_height);
-   opf_files.p_height  = varheight / 2 - vpad;
-   opf_files2.p_height = varheight / 2;
-   opf_files2.p_y      = opf_files.p_y + opf_files.p_height + vpad;
-
-   opf_status1.p_y     = opf_files.p_y + opf_files.p_height + vpad +
-                         opf_files2.p_height + vpad;
+   opf_files.p_y      = opf_file_name.p_y + opf_file_name.p_height + vpad;
+   opf_status1.p_y     = opf_files.p_y + opf_files.p_height + vpad;
    opf_status2.p_y     = opf_status1.p_y;
 }
 
-void opf_files.on_destroy()
+void opf_files.'ENTER'()
 {
-   int index = 0;
-
-   index = _TreeGetFirstChildIndex( 0 );
-   while (index > 0) {
-      _TreeDelete( index, "" );
-      index = _TreeGetFirstChildIndex( 0 );
-   }
-}
-
-void opf_files.on_change(int reason,int index)
-{
-   _str name;
-   _str proj;
-   typeless form;
-
-   if (index < 0)
-      return;
-
-   if (reason == CHANGE_LEAF_ENTER) {
-      name = _TreeGetCaption( index );
-
-      // If after stripping path filename remains the same, we should append project directory
-      // to filename as the name is relative to project path. Otherwise we should use the name
-      // as is.
-      if ((strip_filename( name, "D" ) == name) || (substr( name, 1, 1 ) :== ".")) {
-         proj = _project_get_filename();
-         proj = strip_filename( proj, "N" );
-         name = proj :+ name;
-      }
-
-      // quote name if it includes spaces
-      if (pos( " ", name, 1, 'U' ) != 0)
-         name = "\""name"\"";
-
-      form = p_active_form;
-      e( name );
-      form._delete_window();
-   }
-}
-
-void opf_files2.'ENTER'()
-{
-   _str name = opf_files2.get_current_line();
+   _str name = opf_files.get_current_line();
 
    // If after stripping path filename remains the same, we should append project directory
    // to filename as the name is relative to project path. Otherwise we should use the name
@@ -407,11 +258,8 @@ static _str get_current_line()
 
 static _str regex_chars = "^$.+*?{}[]()\\|";
 
-static _str make_regex( _str pattern, int type )
+static _str make_regex( _str pattern )
 {
-   if (type == OPF_EXACT_MATCH)
-      return pattern;
-
    _str regex = ".*";
    _str ch;
    int i;
@@ -426,14 +274,16 @@ static _str make_regex( _str pattern, int type )
    return lowcase(regex);
 }
 
-boolean opf_string_match2( _str pattern, _str regex, _str str, int type )
+int opf_string_match2( _str pattern, _str regex, _str str)
 {
-   boolean exact_match = pos( pattern, str, 1, 'I' ) != 0;
-   if (type == OPF_EXACT_MATCH)
-      return exact_match;
+   if (pos( pattern, str, 1, 'I' ) != 0)
+       return OPF_EXACT_MATCH;
 
    opf_status1.p_caption = regex;
-   return !exact_match && pos( regex, str, 1, 'UI' ) != 0;
+   if (pos( regex, str, 1, 'UI' ) != 0)
+       return OPF_PATTERN_MATCH;
+
+   return OPF_NO_MATCH;
 }
 
 int opf_string_match( _str pattern, _str str )
@@ -501,14 +351,14 @@ int opf_string_match( _str pattern, _str str )
 
 static void highlight_text(int len, int offset, int color)
 {
-    int marker = _StreamMarkerAdd(opf_files2, offset, len, true, 0, s_markerType, '');
+    int marker = _StreamMarkerAdd(opf_files, offset, len, true, 0, s_markerType, '');
     _StreamMarkerSetTextColor( marker, color );
 }
 
 void add_marked_entry( _str caption, _str pattern, _str regex, int type, int &offset )
 {
    // add the text
-   opf_files2._insert_text(caption"\n");
+   opf_files._insert_text(caption"\n");
 
    // mark the text
    if (type == OPF_EXACT_MATCH)
@@ -534,17 +384,16 @@ void add_marked_entry( _str caption, _str pattern, _str regex, int type, int &of
    offset += length(caption)+1;
 }
 
-void opf_update_tree( _str pattern )
+void opf_update_files( _str pattern )
 {
-   opf_files2._delete_text(DELETE_TO_END_OF_BUFFER);
+   opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
    int type, offset = 0;
    _str caption, regex;
    int idx = 0, first_visible = -1, total_visible = 0, total = 0;
-   for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
-        idx = opf_files._TreeGetNextIndex( idx, "H" )) {
-
-      caption = opf_files._TreeGetCaption( idx );
+   for (idx = 0; idx < s_files._length(); ++idx)
+   {
+      caption = s_files[idx];
       if ( caption == "") {
          continue;
       }
@@ -552,43 +401,32 @@ void opf_update_tree( _str pattern )
       ++total;
 
       // show/hide lines based on pattern
-      type = opf_files._TreeGetUserInfo(idx);
-      regex = make_regex(pattern, type);
-      if (opf_string_match2( pattern, regex, caption, type )) {
-         add_marked_entry(caption, pattern, regex, type, offset);
-         tree_show_node(idx);
-         ++total_visible;
-         if (first_visible == -1)
-            first_visible = idx;
-      } else {
-         tree_hide_node(idx);
+      regex = make_regex(pattern);
+      type = opf_string_match2( pattern, regex, caption);
+      if (type != OPF_NO_MATCH)
+      {
+          add_marked_entry(caption, pattern, regex, type, offset);
+          ++total_visible;
       }
-   }
-
-   // bring into view and select the first visible line
-   if (first_visible != -1) {
-      opf_files._TreeScroll( first_visible );
-      opf_files._TreeSetCurIndex( first_visible );
    }
 
    // update status
    opf_status2.p_caption = total_visible " of " total/2 " matched";
 
    // refresh display
-   opf_files._TreeRefresh();
-   opf_files2.top();
-   opf_files2.refresh();
+   opf_files.top();
+   opf_files.refresh();
 }
 
-void open_project_file.'DOWN'()
-{
-   _TreeDown();
-}
-
-void open_project_file.'UP'()
-{
-   _TreeUp();
-}
+//void open_project_file.'DOWN'()
+//{
+// _TreeDown();
+//}
+//
+//void open_project_file.'UP'()
+//{
+// _TreeUp();
+//}
 
 void open_project_file.'ESC'()
 {
@@ -604,7 +442,7 @@ void opf_timer_cb( int win_id )
    cur_window = p_window_id;
    p_window_id = win_id;
 
-   opf_update_tree( opf_file_name.p_caption );
+   opf_update_files( opf_file_name.p_caption );
 
    p_window_id = cur_window;
 }
