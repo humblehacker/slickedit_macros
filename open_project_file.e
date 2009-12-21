@@ -35,11 +35,11 @@ defeventtab open_project_file;
 
 #define OPF_EXACT_MATCH   1
 #define OPF_PATTERN_MATCH 2
+#define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
 static int opf_tree_font       = CFG_DIALOG;
 static int opf_filt_font       = CFG_DIALOG;
 static int s_markerType        = -1;
-static int s_mismatchColor     = -1;
 static int s_exactMatchColor   = -1;
 static int s_partialMatchColor = -1;
 
@@ -48,11 +48,9 @@ static int opf_timer_handle = 0;
 definit()
 {
    s_markerType        = _MarkerTypeAlloc();
-   s_mismatchColor     = _AllocColor();
    s_exactMatchColor   = _AllocColor();
    s_partialMatchColor = _AllocColor();
-   _default_color( s_mismatchColor,     0xffffff, 0x0000ff, F_BOLD );
-   _default_color( s_exactMatchColor,   0xffffff, _rgb(255,128,0), F_BOLD );
+   _default_color( s_exactMatchColor,   0xffffff, _rgb(255,128,0),   F_BOLD );
    _default_color( s_partialMatchColor, 0xffffff, _rgb(128,128,128), F_BOLD );
 }
 
@@ -370,7 +368,7 @@ void opf_files.on_change(int reason,int index)
 
 static _str regex_chars = "^$.+*?{}[]()\\|";
 
-_str opf_make_regex( _str pattern, int type )
+static _str make_regex( _str pattern, int type )
 {
    if (type == OPF_EXACT_MATCH)
       return pattern;
@@ -462,35 +460,47 @@ int opf_string_match( _str pattern, _str str )
    return 0;
 }
 
-void add_html( _str caption, _str pattern, int type, int &offset )
+static void highlight_text(int len, int offset, int color)
 {
-   int where = 0;
-   int len = length(pattern);
-   int color = 0;
+    int marker = _StreamMarkerAdd(opf_files2, offset, len, true, 0, s_markerType, '');
+    _StreamMarkerSetTextColor( marker, color );
+}
+
+void add_marked_entry( _str caption, _str pattern, _str regex, int type, int &offset )
+{
+   // add the text
+   opf_files2._insert_text(caption"\n");
+
+   // mark the text
    if (type == OPF_EXACT_MATCH)
    {
-      where = pos(pattern, caption, 1, "I") - 1;
-      color = s_exactMatchColor;
+      int where = pos(pattern, caption, 1, "I") - 1;
+      int len = length(pattern);
+      highlight_text(len, offset+where, s_exactMatchColor);
    }
    else
    {
-      pattern = substr(pattern, 3, len-4);
-      where = pos(pattern, caption, 1, "UI") - 1;
-      int start = pos('S0');
-      len = pos('');
-      color = s_partialMatchColor;
+      int chpos = pos(regex, caption, 1, "UI");
+      int plen = length(pattern);
+      _str ch;
+      int i;
+      for (i = 1; i <= plen; ++i) {
+         ch = substr(pattern,i,1);
+         chpos = pos(ch, caption, chpos, "I");
+         highlight_text(1, offset+chpos-1, s_partialMatchColor);
+      }
    }
-   opf_files2._insert_text(caption"\n");
-   int marker = _StreamMarkerAdd(opf_files2, offset+where, len, true, 0, s_markerType, '');
-   _StreamMarkerSetTextColor( marker, color );
+
+   // bump the offset
    offset += length(caption)+1;
 }
 
 void opf_update_tree( _str pattern )
 {
-   opf_files2._delete_text(-2);
+   opf_files2._delete_text(DELETE_TO_END_OF_BUFFER);
+
    int type, offset = 0;
-   _str caption, html, regex;
+   _str caption, regex;
    int idx = 0, first_visible = -1, total_visible = 0, total = 0;
    for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
         idx = opf_files._TreeGetNextIndex( idx, "H" )) {
@@ -502,12 +512,13 @@ void opf_update_tree( _str pattern )
 
       ++total;
 
+      // show/hide lines based on pattern
       type = opf_files._TreeGetUserInfo(idx);
-      regex = opf_make_regex(pattern, type);
+      regex = make_regex(pattern, type);
       if (opf_string_match2( pattern, regex, caption, type )) {
-         ++total_visible;
-         add_html(caption, regex, type, offset);
+         add_marked_entry(caption, pattern, regex, type, offset);
          tree_show_node(idx);
+         ++total_visible;
          if (first_visible == -1)
             first_visible = idx;
       } else {
@@ -515,12 +526,17 @@ void opf_update_tree( _str pattern )
       }
    }
 
+   // bring into view and select the first visible line
    if (first_visible != -1) {
       opf_files._TreeScroll( first_visible );
       opf_files._TreeSetCurIndex( first_visible );
    }
-   opf_files._TreeRefresh();
+
+   // update status
    opf_status2.p_caption = total_visible " of " total/2 " matched";
+
+   // refresh display
+   opf_files._TreeRefresh();
    opf_files2.top();
    opf_files2.refresh();
 }
