@@ -26,114 +26,12 @@
 //
 
 #include "slick.sh"
+#import "form_open_project_file.e"
+#import "editfont.e"
 
 #pragma option( strict, on )
 
 defeventtab open_project_file;
-
-_form open_project_file {
-   p_backcolor=0x80000005;
-   p_border_style=BDS_SIZABLE;
-   p_caption='Open Project File';
-   p_clip_controls=false;
-   p_forecolor=0x80000008;
-   p_height=6741;
-   p_width=11210;
-   p_x=4046;
-   p_y=1391;
-   p_eventtab=open_project_file;
-   _label opf_file_name {
-      p_alignment=AL_LEFT;
-      p_auto_size=false;
-      p_backcolor=0x80000008;
-      p_border_style=BDS_SUNKEN;
-      p_caption='';
-      p_font_bold=false;
-      p_font_italic=false;
-      p_font_name='Tahoma';
-      p_font_size=8;
-      p_font_underline=false;
-      p_forecolor=0x80000008;
-      p_height=234;
-      p_tab_index=2;
-      p_width=11084;
-      p_word_wrap=false;
-      p_x=66;
-      p_y=35;
-   }
-   _tree_view opf_files {
-      p_after_pic_indent_x=50;
-      p_backcolor=0x80000005;
-      p_border_style=BDS_FIXED_SINGLE;
-      p_clip_controls=false;
-      p_CheckListBox=false;
-      p_CollapsePicture='_lbminus.bmp';
-      p_ColorEntireLine=false;
-      p_EditInPlace=false;
-      p_delay=0;
-      p_ExpandPicture='_lbplus.bmp';
-      p_font_bold=false;
-      p_font_italic=false;
-      p_font_name='Tahoma';
-      p_font_size=8;
-      p_font_underline=false;
-      p_forecolor=0x80000008;
-      p_Gridlines=TREE_GRID_NONE;
-      p_height=6351;
-      p_LevelIndent=50;
-      p_LineStyle=TREE_DOTTED_LINES;
-      p_multi_select=MS_NONE;
-      p_NeverColorCurrent=false;
-      p_ShowRoot=false;
-      p_AlwaysColorCurrent=false;
-      p_SpaceY=40;
-      p_scroll_bars=SB_VERTICAL;
-      p_tab_index=1;
-      p_tab_stop=true;
-      p_width=11084;
-      p_x=76;
-      p_y=304;
-      p_eventtab2=_ul2_tree;
-   }
-   _label opf_status1 {
-      p_alignment=AL_LEFT;
-      p_auto_size=false;
-      p_backcolor=0x80000008;
-      p_border_style=BDS_NONE;
-      p_caption='';
-      p_font_bold=false;
-      p_font_italic=false;
-      p_font_name='Tahoma';
-      p_font_size=8;
-      p_font_underline=false;
-      p_forecolor=0x80000008;
-      p_height=234;
-      p_tab_index=2;
-      p_width=5542;
-      p_word_wrap=false;
-      p_x=66;
-      p_y=6424;
-   }
-   _label opf_status2 {
-      p_alignment=AL_LEFT;
-      p_auto_size=false;
-      p_backcolor=0x80000008;
-      p_border_style=BDS_NONE;
-      p_caption='';
-      p_font_bold=false;
-      p_font_italic=false;
-      p_font_name='Tahoma';
-      p_font_size=8;
-      p_font_underline=false;
-      p_forecolor=0x80000008;
-      p_height=234;
-      p_tab_index=2;
-      p_width=5542;
-      p_word_wrap=false;
-      p_x=66+5542;
-      p_y=6424;
-   }
-}
 
 #define OPF_EXACT_MATCH   1
 #define OPF_PATTERN_MATCH 2
@@ -142,72 +40,6 @@ static int opf_tree_font  = CFG_DIALOG;
 static int opf_filt_font  = CFG_DIALOG;
 
 static int opf_timer_handle = 0;
-
-// the indispensable setEditFont macro by Ding
-/**
- * Set edit control fonts
- * <pre>
- * Font Index:
- * Command Line,                 CFG_CMDLINE
- * Status Line,                  CFG_STATUS
- * SBCS/DBCS Source Windows,     CFG_SBCS_DBCS_SOURCE_WINDOW
- * Hex Source Windows,           CFG_HEX_SOURCE_WINDOW
- * Unicode Source Windows,       CFG_UNICODE_SOURCE_WINDOW
- * File Manager Windows,         CFG_FILE_MANAGER_WINDOW
- * Diff Editor Source Windows,   CFG_DIFF_EDITOR_WINDOW
- * Parameter Info,               CFG_FUNCTION_HELP
- * Parameter Info Fixed,         CFG_FUNCTION_HELP_FIXED
- * Menu,                         CFG_MENU
- * Dialog,                       CFG_DIALOG
- * HTML Proportional,            CFG_MINIHTML_PROPORTIONAL
- * HTML Fixed,                   CFG_MINIHTML_FIXED
- * </pre>
- *
- * @author Ding Zhaojie
- *
- * @param control    editor control
- * @param fontIndex  font index
- *
- * @see _use_edit_font()
- */
-void opf_getEditFont(int fontIndex = CFG_MINIHTML_FIXED, _str &font_name=null, int &font_size=null, int &font_flags=null, int &charset=null)
-{
-   _str fname = '';
-   typeless fsize = 10;
-   typeless fflags = 0;
-   typeless fcharset=VSCHARSET_DEFAULT;
-   parse _default_font(fontIndex) with fname ',' fsize ',' fflags ',' fcharset ',';
-
-   if ( font_name    != null  )  font_name  = fname;
-   if ( font_size    != null  )  font_size  = fsize;
-   if ( font_flags   != null  )  font_flags = fflags;
-   if ( charset      != null  )  charset    = fcharset;
-}
-
-void opf_setEditFont(typeless control, int fontIndex = CFG_MINIHTML_FIXED)
-{
-   _str font_name = '';
-   typeless font_size = 10;
-   typeless font_flags = 0;
-   typeless charset=VSCHARSET_DEFAULT;
-
-   opf_getEditFont( fontIndex, font_name, font_size, font_flags, charset );
-
-   int font_bold              = font_flags & F_BOLD;
-   int font_italic            = font_flags & F_ITALIC;
-   int font_strike_thru       = font_flags & F_STRIKE_THRU;
-   int font_underline         = font_flags & F_UNDERLINE;
-
-   /* Turn off redraw so we are not recalculating the world on every little font change. */
-   control.p_redraw           = false;
-   control.p_font_name        = font_name;
-   control.p_font_size        = font_size;
-   control.p_font_bold        = (font_bold != 0);
-   control.p_font_italic      = (font_italic != 0);
-   control.p_font_strike_thru = (font_strike_thru != 0);
-   control.p_font_charset     = charset;
-   control.p_redraw           = true;
-}
 
 void close_form()
 {
@@ -327,7 +159,7 @@ void open_project_file.on_load()
 
 void opf_file_name.on_create()
 {
-   opf_setEditFont( opf_file_name, opf_filt_font );
+   setEditFont( opf_file_name, opf_filt_font );
 }
 
 void tree_reset_moreflag(int ItemIndex, int flag)
@@ -421,10 +253,10 @@ void opf_files.on_create()
    forget_project( xml_id );
 
    // Workaround for tree font issue. Credit goes to HS2!
-   opf_setEditFont( opf_files, opf_tree_font );
+   setEditFont( opf_files, opf_tree_font );
 
    _str font_name = '';
-   opf_getEditFont( opf_tree_font, font_name );
+   getEditFont( opf_tree_font, font_name );
    opf_files.p_font_name = font_name;
 }
 
@@ -457,16 +289,23 @@ void open_project_file.on_resize()
 
    // Calculate horizontal dimensions
    opf_files.p_width     = clientwidth - hpad * 2;
+   opf_files2.p_width    = opf_files.p_width;
    opf_file_name.p_width = opf_files.p_width + fnpad;
    opf_status1.p_width   = (opf_files.p_width * 2/3) - hpad;
    opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
    opf_status2.p_x       = opf_status1.p_width + hpad * 2;
 
    // Calculate vertical dimensions
-   opf_files.p_height = clientheight - vpad * 4 -
-                        opf_file_name.p_height - opf_status1.p_height;
-   opf_status1.p_y    = opf_files.p_y + opf_files.p_height + vpad;
-   opf_status2.p_y    = opf_status1.p_y;
+   int varheight       = clientheight - (vpad * 4 +
+                         opf_file_name.p_height +
+                         opf_status1.p_height);
+   opf_files.p_height  = varheight / 2 - vpad;
+   opf_files2.p_height = varheight / 2;
+   opf_files2.p_y      = opf_files.p_y + opf_files.p_height + vpad;
+
+   opf_status1.p_y     = opf_files.p_y + opf_files.p_height + vpad +
+                         opf_files2.p_height + vpad;
+   opf_status2.p_y     = opf_status1.p_y;
 }
 
 void opf_files.on_destroy()
@@ -603,10 +442,25 @@ int opf_string_match( _str pattern, _str str )
    return 0;
 }
 
+void add_html( _str caption, _str pattern, int type )
+{
+   if (type == OPF_EXACT_MATCH)
+   {
+      int len = length(pattern);
+      _str before, after;
+      int where = pos(pattern, caption, 1, "I");
+      before = substr(caption, 1, where-1);
+      after  = substr(caption, where+len);
+      caption = before"<b>"substr(caption,where,len)"</b>"after;
+   }
+   opf_files2.p_text :+= "<tt><a href=\"file://"caption"\">"caption"</a></tt><br>";
+}
+
 void opf_update_tree( _str pattern )
 {
+   opf_files2.p_text = "";
    int type;
-   _str caption;
+   _str caption, html;
    int idx = 0, first_visible = -1, total_visible = 0, total = 0;
    for (idx = opf_files._TreeGetNextIndex( idx, "H" ); idx >= 0;
         idx = opf_files._TreeGetNextIndex( idx, "H" )) {
@@ -620,6 +474,7 @@ void opf_update_tree( _str pattern )
 
       type = opf_files._TreeGetUserInfo(idx);
       if (opf_string_match2( pattern, caption, type )) {
+         add_html(caption, pattern, type);
          tree_show_node(idx);
          ++total_visible;
          if (first_visible == -1)
@@ -693,3 +548,5 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
 {
    show( "-mdi -xy open_project_file" );
 }
+
+
