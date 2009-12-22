@@ -34,19 +34,28 @@
 defeventtab open_project_file;
 
 #define OPF_NO_MATCH      0
-#define OPF_EXACT_MATCH   1
-#define OPF_PATTERN_MATCH 2
+#define OPF_PATTERN_MATCH 1
+#define OPF_EXACT_MATCH   5
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
-static int  opf_filt_font       = CFG_DIALOG;
-static int  opf_timer_handle    = 0;
+struct ListEntry
+{
+   int index;
+   int rank;
+};
+
+
+static _str s_files[];
+static int  s_files_last        =  0;
+static int  opf_filt_font       =  CFG_DIALOG;
+static int  opf_timer_handle    =  0;
 static int  s_markerType        = -1;
 static int  s_exactMatchColor   = -1;
 static int  s_partialMatchColor = -1;
-static _str s_files[];
 
 definit()
 {
+   s_files             = null;
    s_markerType        = _MarkerTypeAlloc();
    s_exactMatchColor   = _AllocColor();
    s_partialMatchColor = _AllocColor();
@@ -65,9 +74,12 @@ int check_for_project()
 
    ext = _project_get_filename();
 
-   if (strcmp( substr( ext, length( ext ) - 2, 3 ), "vpe" ) == 0) {
+   if (strcmp( substr( ext, length( ext ) - 2, 3 ), "vpe" ) == 0)
+   {
       return 0;
-   } else {
+   }
+   else
+   {
       return 1;
    }
 }
@@ -85,21 +97,25 @@ int project_find_files( int xml, int index )
 {
    int temp;
 
-   if (index < 0) {
+   if (index < 0)
+   {
       return 0;
    }
 
-   if (_xmlcfg_get_name( xml, index ) == "Files") {
+   if (_xmlcfg_get_name( xml, index ) == "Files")
+   {
       return index;
    }
 
    temp = project_find_files( xml, _xmlcfg_get_first_child( xml, index ) );
-   if (temp != 0) {
+   if (temp != 0)
+   {
       return temp;
    }
 
    temp = project_find_files( xml, _xmlcfg_get_next_sibling( xml, index ) );
-   if (temp != 0) {
+   if (temp != 0)
+   {
       return temp;
    }
 
@@ -108,7 +124,6 @@ int project_find_files( int xml, int index )
 
 void parse_project( int xml, int index, _str basic_name )
 {
-   int last=0;
    int idx;
    int child;
    int how;
@@ -121,11 +136,12 @@ void parse_project( int xml, int index, _str basic_name )
    int idx2;
    int new_idx;
 
-   do {
-      if ((_xmlcfg_get_name( xml, idx ) == "F") && (_xmlcfg_get_attribute( xml, idx, "N", "" ) != "")) {
+   do
+   {
+      if ((_xmlcfg_get_name( xml, idx ) == "F") && (_xmlcfg_get_attribute( xml, idx, "N", "" ) != ""))
+      {
          name = _xmlcfg_get_attribute( xml, idx, "N", "" );
-         s_files[last++] = name;
-         opf_files._insert_text(name"\n");
+         s_files[s_files_last++] = name;
       }
 
       child = _xmlcfg_get_first_child( xml, idx );
@@ -135,8 +151,6 @@ void parse_project( int xml, int index, _str basic_name )
       idx2 = idx;
       idx = _xmlcfg_get_next_sibling( xml, idx );
    } while (idx >= 0);
-   opf_files.top();
-   opf_files.refresh();
 }
 
 void forget_project( int tree )
@@ -149,7 +163,8 @@ void open_project_file.on_load()
    int index;
 
    // Checking if we have opened project...
-   if (check_for_project() == 0) {
+   if (check_for_project() == 0)
+   {
       _message_box( "Please open project first..." );
       close_form();
       return;
@@ -166,18 +181,31 @@ void opf_files.on_create()
 {
    p_line_numbers_len = 0;
    p_KeepPictureGutter = false;
+   p_readonly_mode = true;
 
    int xml_id = 0;
    int no_files = 0;
    int i;
 
-   if (preparse_project( &xml_id )) {
+   if (preparse_project( &xml_id ))
+   {
       _message_box( "Failed to load project file..." );
       close_form();
    }
 
    no_files = project_find_files( xml_id, 0 );
+   s_files._makeempty();
+   s_files_last = 0;
    parse_project( xml_id, no_files, "" );
+   s_files._sort('F');
+   int idx;
+   for (idx = 0; idx < s_files._length(); ++idx)
+   {
+      opf_files._insert_text(s_files[idx]"\n");
+   }
+   opf_status2.p_caption = "0 of " s_files._length() " matched";
+   opf_files.top();
+   opf_files.refresh();
    forget_project( xml_id );
 }
 
@@ -209,7 +237,7 @@ void open_project_file.on_resize()
    // the outer border. Hence, the extra 20 units.
 
    // Calculate horizontal dimensions
-   opf_files.p_width    = clientwidth - hpad * 2;
+   opf_files.p_width     = clientwidth - hpad * 2;
    opf_file_name.p_width = opf_files.p_width + fnpad;
    opf_status1.p_width   = (opf_files.p_width * 2/3) - hpad;
    opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
@@ -217,11 +245,11 @@ void open_project_file.on_resize()
 
    // Calculate vertical dimensions
    opf_files.p_height = clientheight - (vpad * 4 +
-                         opf_file_name.p_height +
-                         opf_status1.p_height);
+                                        opf_file_name.p_height +
+                                        opf_status1.p_height);
    opf_files.p_y      = opf_file_name.p_y + opf_file_name.p_height + vpad;
-   opf_status1.p_y     = opf_files.p_y + opf_files.p_height + vpad;
-   opf_status2.p_y     = opf_status1.p_y;
+   opf_status1.p_y    = opf_files.p_y + opf_files.p_height + vpad;
+   opf_status2.p_y    = opf_status1.p_y;
 }
 
 void opf_files.'ENTER'()
@@ -231,7 +259,8 @@ void opf_files.'ENTER'()
    // If after stripping path filename remains the same, we should append project directory
    // to filename as the name is relative to project path. Otherwise we should use the name
    // as is.
-   if ((strip_filename( name, "D" ) == name) || (substr( name, 1, 1 ) :== ".")) {
+   if ((strip_filename( name, "D" ) == name) || (substr( name, 1, 1 ) :== "."))
+   {
       _str proj = _project_get_filename();
       proj = strip_filename( proj, "N" );
       name = proj :+ name;
@@ -264,26 +293,75 @@ static _str make_regex( _str pattern )
    _str ch;
    int i;
    int last = length(pattern);
-   for (i = 1; i <= last; ++i) {
+   for (i = 1; i <= last; ++i)
+   {
       ch = substr(pattern, i, 1);
       if (pos( ch, regex_chars ) !=0) // escape regex characters
          regex :+= "\\"
-      regex :+= ch;
+                   regex :+= ch;
       regex :+= ".*";
    }
    return lowcase(regex);
 }
 
-int opf_string_match2( _str pattern, _str regex, _str str)
+int rank_match(_str pattern, _str regex, _str str)
 {
-   if (pos( pattern, str, 1, 'I' ) != 0)
-       return OPF_EXACT_MATCH;
+   /*
+       Each character matched is ranked according to the following heruistics:
 
-   opf_status1.p_caption = regex;
-   if (pos( regex, str, 1, 'UI' ) != 0)
-       return OPF_PATTERN_MATCH;
+         5 points for every character in an exact match.
+         4 points for the first character, a character following a
+                  '_', or a capital letter.
+         3 points for a character immediately following a '/' or '\\'.
+         2 points for a character following a '.'.
+         1 point for any other character.
 
-   return OPF_NO_MATCH;
+       A rank is a sum of these points for each matched character.
+   */
+
+   int lastslash = lastpos("[/\\]", str, 1, "U");
+   int total_rank = 0;
+   if (pattern == '')
+   {
+      total_rank = 1;
+   }
+   else if (pos( pattern, str, 1, 'I' ) != 0)
+   {
+      total_rank = OPF_EXACT_MATCH * pattern._length();
+      if (pos('S0') > lastslash)
+         total_rank *= 2;
+   }
+   else
+   {
+      opf_status1.p_caption = regex;
+      if (pos( regex, str, 1, 'UI' ) != 0)
+      {
+         int chpos = pos(regex, str, 1, "UI");
+         _str ch, pch = '';
+         int rank = 0;
+         int i;
+         int len = pattern._length();
+         for (i = 1; i <= len; ++i)
+         {
+            ch = substr(pattern,i,1);
+            chpos = pos(ch, str, chpos, "I");
+            pch = (chpos > 1) ? substr(str, chpos-1, 1) : '';
+            if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+               rank = 4;
+            else if (pch == '/' || pch == '\\')
+               rank = 3;
+            else if (pch == '.')
+               rank = 2;
+            else
+               rank = 1;
+            if (chpos > lastslash)
+                rank *= 2;
+            total_rank += rank;
+         }
+      }
+   }
+
+   return total_rank;
 }
 
 int opf_string_match( _str pattern, _str str )
@@ -292,7 +370,8 @@ int opf_string_match( _str pattern, _str str )
    int index, found;
 
    // all strings matches empty string...
-   if (pattern == "") {
+   if (pattern == "")
+   {
       return 1;
    }
 
@@ -322,7 +401,8 @@ int opf_string_match( _str pattern, _str str )
    word = strip_last_word( regex );
    str = strip_filename( string, "P" );
    temp = ".*"word".*";
-   if (pos( temp, str, 1, 'U' ) == 0) {
+   if (pos( temp, str, 1, 'U' ) == 0)
+   {
       return 0;
    }
 
@@ -332,9 +412,11 @@ int opf_string_match( _str pattern, _str str )
    // Now checking path...
    str = strip_filename( string, "N" );
    word = strip_last_word( regex );
-   while (word != regex) {
+   while (word != regex)
+   {
       temp = ".*"word".*";
-      if (pos( temp, str, 1, 'U' ) != 0) {
+      if (pos( temp, str, 1, 'U' ) != 0)
+      {
          found++;
       }
 
@@ -342,7 +424,8 @@ int opf_string_match( _str pattern, _str str )
       index++;
    }
 
-   if (found == index) {
+   if (found == index)
+   {
       return 1;
    }
 
@@ -351,82 +434,75 @@ int opf_string_match( _str pattern, _str str )
 
 static void highlight_text(int len, int offset, int color)
 {
-    int marker = _StreamMarkerAdd(opf_files, offset, len, true, 0, s_markerType, '');
-    _StreamMarkerSetTextColor( marker, color );
+   int marker = _StreamMarkerAdd(opf_files, offset, len, true, 0, s_markerType, '');
+   _StreamMarkerSetTextColor( marker, color );
 }
 
-void add_marked_entry( _str caption, _str pattern, _str regex, int type, int &offset )
+void add_marked_entry( _str caption, _str pattern, _str regex, int rank, int &offset )
 {
    // add the text
-   opf_files._insert_text(caption"\n");
+   _str text = caption" "rank"\n";
+   opf_files._insert_text(text);
 
    // mark the text
-   if (type == OPF_EXACT_MATCH)
+   int len = pattern._length();
+   int chpos = pos(pattern, caption, 1, "I");
+   if (chpos == 0)
+      chpos = pos(regex, caption, 1, "UI");
+   _str ch;
+   int i;
+   for (i = 1; i <= len; ++i)
    {
-      int where = pos(pattern, caption, 1, "I") - 1;
-      int len = length(pattern);
-      highlight_text(len, offset+where, s_exactMatchColor);
-   }
-   else
-   {
-      int chpos = pos(regex, caption, 1, "UI");
-      int plen = length(pattern);
-      _str ch;
-      int i;
-      for (i = 1; i <= plen; ++i) {
-         ch = substr(pattern,i,1);
-         chpos = pos(ch, caption, chpos, "I");
-         highlight_text(1, offset+chpos-1, s_partialMatchColor);
-      }
+      ch = substr(pattern,i,1);
+      chpos = pos(ch, caption, chpos, "I");
+      highlight_text(1, offset+chpos-1, s_exactMatchColor);
    }
 
    // bump the offset
-   offset += length(caption)+1;
+   offset += length(text);
 }
 
 void opf_update_files( _str pattern )
 {
+   // clear list edit control
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
-   int type, offset = 0;
-   _str caption, regex;
-   int idx = 0, first_visible = -1, total_visible = 0, total = 0;
+   // rank list items
+   ListEntry files[] = null;
+   _str regex;
+   int rank, idx, last = 0;
    for (idx = 0; idx < s_files._length(); ++idx)
    {
-      caption = s_files[idx];
-      if ( caption == "") {
-         continue;
-      }
-
-      ++total;
-
-      // show/hide lines based on pattern
       regex = make_regex(pattern);
-      type = opf_string_match2( pattern, regex, caption);
-      if (type != OPF_NO_MATCH)
+      rank = rank_match(pattern, regex, s_files[idx]);
+      if (rank)
       {
-          add_marked_entry(caption, pattern, regex, type, offset);
-          ++total_visible;
+         files[last].index = idx;
+         files[last].rank  = rank;
+         ++last;
       }
    }
 
+   // sort list by rank
+   if (pattern != '')
+      quicksort(files, 0, files._length()-1);
+
+   // add items to list edit control
+   _str text;
+   int offset = 0;
+   for (idx = 0; idx < files._length(); ++idx)
+   {
+      text = s_files[files[idx].index];
+      add_marked_entry(text, pattern, regex, files[idx].rank, offset);
+   }
+
    // update status
-   opf_status2.p_caption = total_visible " of " total/2 " matched";
+   opf_status2.p_caption = files._length() " of " s_files._length() " matched";
 
    // refresh display
    opf_files.top();
    opf_files.refresh();
 }
-
-//void open_project_file.'DOWN'()
-//{
-// _TreeDown();
-//}
-//
-//void open_project_file.'UP'()
-//{
-// _TreeUp();
-//}
 
 void open_project_file.'ESC'()
 {
@@ -469,10 +545,50 @@ def  '_'          = opf_on_key;
 def  '.'          = opf_on_key;
 def  ' '          = opf_on_key;
 def  '/'          = opf_on_key;
+def  '\'          = opf_on_key;
 
 _command void _open_project_file() name_info( ',' VSARG2_MACRO )
 {
    show( "-mdi -xy open_project_file" );
 }
 
+static void swap_array_elements( typeless (&array)[], int a, int b )
+{
+   if ( a < 0 || a >= array._length() || b < 0 || b >= array._length() )
+      return;
+
+   typeless vA = array[a];
+   array[a] = array[b];
+   array[b] = vA;
+}
+
+// sorts ListEntry[] in descending order by rank
+static void quicksort(ListEntry (&list)[], int first, int last)
+{
+   int key, lo, hi, mid;
+   if (first < last)
+   {
+      mid = ((first+last) /2); // choose_pivot
+      swap_array_elements(list, first, mid);
+      key = list[first].rank;
+      lo = first+1;
+      hi = last;
+      while (lo <= hi)
+      {
+         while ((lo <= last) && (list[lo].rank >= key))
+            lo++;
+         while ((hi >= first) && (list[hi].rank < key))
+            hi--;
+         if (lo < hi)
+            swap_array_elements(list, lo, hi);
+      }
+
+      // swap two elements
+      swap_array_elements(list, first, hi);
+
+      // recursively sort the lesser list
+      quicksort(list, first, hi-1);
+      quicksort(list, hi+1, last);
+   }
+}
 
