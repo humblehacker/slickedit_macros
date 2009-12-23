@@ -304,6 +304,53 @@ static _str make_regex( _str pattern )
    return lowcase(regex);
 }
 
+
+boolean rank_exact_match(_str &pattern, int lastslash, int &search_from, RankedEntry &curr_entry)
+{
+   if (pos( pattern, *curr_entry.text, search_from, 'I' ) != 0)
+   {
+      search_from = pos('S');
+      int i, last = search_from + pattern._length();
+      for (i = search_from; i < last; ++i)
+      {
+         curr_entry.rank[i] = OPF_EXACT_MATCH * ((i > lastslash) ? 2 : 1);
+      }
+      return true;
+   }
+   return false;
+}
+
+
+boolean rank_regex_match(_str pattern, _str regex, int lastslash, int &search_from, RankedEntry &curr_entry)
+{
+   int chpos = pos( regex, *curr_entry.text, search_from, 'UI' );
+   if (chpos == 0)
+      return false;
+
+   _str ch, pch = '';
+   int rank = 0;
+   int i, last = pattern._length();
+   for (i = 1; i <= last; ++i)
+   {
+      ch = substr(pattern, i, 1);
+      chpos = pos(ch, *curr_entry.text, chpos, "I");
+      ch = substr(*curr_entry.text, chpos, 1);
+      pch = (chpos > 1) ? substr(*curr_entry.text, chpos-1, 1) : '';
+      if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+         curr_entry.rank[chpos] = 4;
+      else if (pch == '/' || pch == '\\')
+         curr_entry.rank[chpos] = 3;
+      else if (pch == '.')
+         curr_entry.rank[chpos] = 2;
+      else
+         curr_entry.rank[chpos] = 1;
+      if (chpos > lastslash)
+         curr_entry.rank[chpos] *= 2;
+   }
+   search_from = chpos;
+   return true;
+}
+
 void rank_match(_str pattern, _str regex, RankedEntry &max_entry)
 {
    /*
@@ -317,6 +364,9 @@ void rank_match(_str pattern, _str regex, RankedEntry &max_entry)
          1 point for any other character.
 
        A rank is a sum of these points for each matched character.
+
+       optimization 1: if a single character pattern fails an exact match
+         there is no need to check it for a pattern match.
    */
 
    opf_status1.p_caption = regex;
@@ -326,56 +376,18 @@ void rank_match(_str pattern, _str regex, RankedEntry &max_entry)
    int lastslash = lastpos('[/\\]', *max_entry.text, MAXINT, "U");
    int search_from = 1;
    RankedEntry curr_entry = max_entry;
-   _str *text = max_entry.text;
-   int chpos = 0;
    loop
    {
       // initialize rank
-      int i, last = text->_length();
+      int i, last = curr_entry.text->_length();
       for (i = 0; i <= last; ++i)
          curr_entry.rank[i] = 0;
       curr_entry.total_rank = 0;
 
-      // rank exact match
-      if (pos( pattern, *text, search_from, 'I' ) != 0)
-      {
-         search_from = pos('S');
-         last = search_from + pattern._length();
-         for (i = search_from; i < last; ++i)
-         {
-            curr_entry.rank[i] = OPF_EXACT_MATCH * ((i > lastslash) ? 2 : 1);
-         }
-      }
-      // rank regex match
-      else if (pos( regex, *text, search_from, 'UI' ) != 0)
-      {
-         chpos = pos('S');
-         _str ch, pch = '';
-         int rank = 0;
-         int len = pattern._length();
-         for (i = 1; i <= len; ++i)
-         {
-            ch = substr(pattern, i, 1);
-            chpos = search_from = pos(ch, *text, chpos, "I");
-            ch = substr(*text, chpos, 1);
-            pch = (chpos > 1) ? substr(*text, chpos-1, 1) : '';
-            if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-               curr_entry.rank[chpos] = 4;
-            else if (pch == '/' || pch == '\\')
-               curr_entry.rank[chpos] = 3;
-            else if (pch == '.')
-               curr_entry.rank[chpos] = 2;
-            else
-               curr_entry.rank[chpos] = 1;
-            if (chpos > lastslash)
-               curr_entry.rank[chpos] *= 2;
-         }
-      }
-      // no match => no rank
-      else
-      {
-         break;
-      }
+      if (!rank_exact_match(pattern, lastslash, search_from, curr_entry))
+         if (pattern._length() == 1 || // optimization 1
+            !rank_regex_match(pattern, regex, lastslash, search_from, curr_entry))
+            break;
 
       // calculate total rank
       curr_entry.total_rank = 0;
@@ -412,14 +424,11 @@ void add_ranked_entry(RankedEntry &entry, int &offset)
    }
 
    // bump the offset
-
    offset += text._length();
 }
 
 void opf_update_files(_str pattern)
 {
-   profile("on");
-
    // clear list edit control
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
@@ -457,8 +466,6 @@ void opf_update_files(_str pattern)
    // refresh display
    opf_files.top();
    opf_files.refresh();
-
-   profile("view");
 }
 
 void open_project_file.'ESC'()
