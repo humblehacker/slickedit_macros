@@ -28,6 +28,7 @@
 #include "slick.sh"
 #include "form_open_project_file.e"
 #import "editfont.e"
+#import "quicksort.e"
 
 #pragma option( strict, on )
 
@@ -44,6 +45,11 @@ struct RankedEntry
    int   total_rank;
    _str *text;
 };
+
+static int RankedEntryKeyFunc(typeless &entry)
+{
+   return ((RankedEntry)entry).total_rank;
+}
 
 static _str s_files[];
 static int  s_files_last        =  0;
@@ -329,6 +335,7 @@ static void opf_update_files(_str pattern)
    // clear list edit control
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
+   profile("on");
    // build list of ranked entries
    _str regex = make_regex(pattern);
    RankedEntry entries[] = null;
@@ -348,7 +355,7 @@ static void opf_update_files(_str pattern)
 
    // sort list by rank
    if (pattern != '')
-      quicksort(entries, 0, entries._length()-1);
+      quicksort(entries, 0, entries._length()-1, RankedEntryKeyFunc);
 
    // add entries to list edit control
    int offset = 0;
@@ -358,51 +365,14 @@ static void opf_update_files(_str pattern)
          add_ranked_entry(entries[idx], offset);
    }
 
+   profile("view");
+
    // update status
    opf_status2.p_caption = entries._length() " of " s_files._length() " matched";
 
    // refresh display
    opf_files.top();
    opf_files.refresh();
-}
-
-static void swap_array_elements( typeless (&array)[], int a, int b )
-{
-   if ( a < 0 || a >= array._length() || b < 0 || b >= array._length() )
-      return;
-
-   typeless vA = array[a];
-   array[a] = array[b];
-   array[b] = vA;
-}
-
-static int partition(RankedEntry (&list)[], int l, int r)
-{
-   int i = l-1, j = r;
-   int value = list[r].total_rank;
-   loop
-   {
-      while (list[++i].total_rank > value)
-         ;
-      while (value > list[--j].total_rank)
-      {
-         if (j == 1)
-            break;
-      }
-      if (i >= j)
-         break;
-      swap_array_elements(list, i, j);
-   }
-   swap_array_elements(list, i, r);
-   return i;
-}
-
-static void quicksort(RankedEntry (&list)[], int l, int r)
-{
-   if (r <= l) return;
-   int i = partition(list, l, r);
-   quicksort(list, l, i-1);
-   quicksort(list, i+1, r);
 }
 
 void open_project_file.on_load()
