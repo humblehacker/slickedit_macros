@@ -376,34 +376,33 @@ static void swap_array_elements( typeless (&array)[], int a, int b )
    array[b] = vA;
 }
 
-// sorts ListEntry[] in descending order by rank
-static void quicksort(RankedEntry (&list)[], int first, int last)
+static int partition(RankedEntry (&list)[], int l, int r)
 {
-   int key, lo, hi, mid;
-   if (first < last)
+   int i = l-1, j = r;
+   int value = list[r].total_rank;
+   loop
    {
-      mid = ((first+last) /2); // choose_pivot
-      swap_array_elements(list, first, mid);
-      key = list[first].total_rank;
-      lo = first+1;
-      hi = last;
-      while (lo <= hi)
+      while (list[++i].total_rank > value)
+         ;
+      while (value > list[--j].total_rank)
       {
-         while ((lo <= last) && (list[lo].total_rank >= key))
-            lo++;
-         while ((hi >= first) && (list[hi].total_rank < key))
-            hi--;
-         if (lo < hi)
-            swap_array_elements(list, lo, hi);
+         if (j == 1)
+            break;
       }
-
-      // swap two elements
-      swap_array_elements(list, first, hi);
-
-      // recursively sort the lesser list
-      quicksort(list, first, hi-1);
-      quicksort(list, hi+1, last);
+      if (i >= j)
+         break;
+      swap_array_elements(list, i, j);
    }
+   swap_array_elements(list, i, r);
+   return i;
+}
+
+static void quicksort(RankedEntry (&list)[], int l, int r)
+{
+   if (r <= l) return;
+   int i = partition(list, l, r);
+   quicksort(list, l, i-1);
+   quicksort(list, i+1, r);
 }
 
 void open_project_file.on_load()
@@ -443,7 +442,7 @@ void opf_files.on_create()
 
    no_files = project_find_files( xml_id, 0 );
    s_files = null;
-   s_files_last = 0; 
+   s_files_last = 0;
    parse_project( xml_id, no_files, "" );
    s_files._sort('F');
    int idx;
