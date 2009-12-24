@@ -45,9 +45,26 @@ class RankedEntry
    int   m_rank[] = null;
    int   m_total_rank = 0;
    _str *m_text;
+   int   m_lastslash = 0;
+
    RankedEntry(_str *text = null)
    {
       m_text = text;
+   }
+   void update_lastslash()
+   {
+      m_lastslash = lastpos(FILESEP, *m_text);
+   }
+   void clear_ranking()
+   {
+      m_rank = null;
+      m_total_rank = 0;
+   }
+   void update_total_rank()
+   {
+      m_total_rank = 0;
+      foreach (auto rank in m_rank)
+         m_total_rank += rank;
    }
    static RankedEntry * new(_str *text = null)
    {
@@ -255,64 +272,54 @@ static _str make_regex( _str pattern )
    return lowcase(regex);
 }
 
-
-static boolean rank_exact_match(_str &pattern, int lastslash, int &search_from, RankedEntry &curr_entry)
+static int rank_char_at_pos(_str text, int chpos)
 {
-   if (pos( pattern, *curr_entry.m_text, search_from, 'I' ) != 0)
-   {
-      search_from = pos('S');
-      int i, last = search_from + pattern._length();
-      for (i = search_from; i < last; ++i)
-      {
-         curr_entry.m_rank[i] = OPF_EXACT_MATCH * ((i > lastslash) ? 2 : 1);
-      }
-      return true;
-   }
-   return false;
+   _str ch = substr(text, chpos, 1);
+   _str pch = (chpos > 1) ? substr(text, chpos-1, 1) : '';
+   if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+      return 4;
+   if (pch == FILESEP)
+      return 3;
+   if (pch == '.')
+      return 2;
+   return 1;
 }
 
-
-static boolean rank_regex_match(_str &pattern, _str &regex, int lastslash, int &search_from, RankedEntry &curr_entry)
+static boolean rank_exact_match(_str &pattern, int &match_start, RankedEntry &curr_entry)
 {
-   int chpos = pos( regex, *curr_entry.m_text, search_from, 'UI' );
+   int chpos = pos( pattern, *curr_entry.m_text, match_start, 'I' );
    if (chpos == 0)
       return false;
 
-   _str ch, pch = '';
-   int rank = 0;
+   match_start = chpos;
+   int last = match_start + pattern._length();
+   for (chpos = match_start; chpos < last; ++chpos)
+   {
+      curr_entry.m_rank[chpos] = rank_char_at_pos(*curr_entry.m_text, chpos) * 2;
+      if (chpos > curr_entry.m_lastslash)
+         curr_entry.m_rank[chpos] *= 2;
+   }
+   return true;
+}
+
+static boolean rank_regex_match(_str &pattern, _str &regex, int &match_start, RankedEntry &curr_entry)
+{
+   int chpos = pos( regex, *curr_entry.m_text, match_start, 'UI' );
+   if (chpos == 0)
+      return false;
+
+   _str ch;
    int i, last = pattern._length();
    for (i = 1; i <= last; ++i)
    {
       ch = substr(pattern, i, 1);
       chpos = pos(ch, *curr_entry.m_text, chpos, "I");
-      ch = substr(*curr_entry.m_text, chpos, 1);
-      pch = (chpos > 1) ? substr(*curr_entry.m_text, chpos-1, 1) : '';
-      if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-         curr_entry.m_rank[chpos] = 4;
-      else if (pch == FILESEP)
-         curr_entry.m_rank[chpos] = 3;
-      else if (pch == '.')
-         curr_entry.m_rank[chpos] = 2;
-      else
-         curr_entry.m_rank[chpos] = 1;
-      if (chpos > lastslash)
+      curr_entry.m_rank[chpos] = rank_char_at_pos(*curr_entry.m_text, chpos);
+      if (chpos > curr_entry.m_lastslash)
          curr_entry.m_rank[chpos] *= 2;
    }
-   search_from = chpos;
+   match_start = chpos;
    return true;
-}
-
-static void initialize_ranked_entry(RankedEntry &curr_entry)
-{
-   curr_entry.m_rank = null;
-   curr_entry.m_total_rank = 0;
-}
-
-static void calculate_total_rank(RankedEntry &curr_entry)
-{
-   curr_entry.m_total_rank = 0;
-   foreach (auto rank in curr_entry.m_rank)
-      curr_entry.m_total_rank += rank;
 }
 
 static void choose_max_entry(RankedEntry &max_entry, RankedEntry curr_entry)
@@ -344,21 +351,21 @@ static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
    if (pattern_len == 0)
       return;
 
-   int lastslash = lastpos(FILESEP, *max_entry.m_text);
-   int search_from = 1;
+   max_entry.update_lastslash();
+   int match_start = 1;
    RankedEntry curr_entry = max_entry;
    loop
    {
-      initialize_ranked_entry(curr_entry);
+      curr_entry.clear_ranking();
 
-      if (!rank_exact_match(pattern, lastslash, search_from, curr_entry))
+      if (!rank_exact_match(pattern, match_start, curr_entry))
          if (pattern_len == 1 || // optimization 1
-            !rank_regex_match(pattern, regex, lastslash, search_from, curr_entry))
+            !rank_regex_match(pattern, regex, match_start, curr_entry))
             break;
 
-      calculate_total_rank(curr_entry);
+      curr_entry.update_total_rank();
       choose_max_entry(max_entry, curr_entry);
-      ++search_from;
+      ++match_start;
    }
 }
 
@@ -565,7 +572,9 @@ void opf_timer_cb( int win_id )
    cur_window = p_window_id;
    p_window_id = win_id;
 
+// profile("on");
    opf_update_files( opf_file_name.p_caption );
+// profile("view");
 
    p_window_id = cur_window;
 }
