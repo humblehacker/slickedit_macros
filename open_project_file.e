@@ -38,16 +38,16 @@ defeventtab open_project_file;
 #define OPF_EXACT_MATCH   5
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
-class RankedEntry
+class WeightedEntry
 {
-   private static RankedEntry s_mempool[] = null;
-   private static int         s_next_instance = 0;
-   int   m_rank[] = null;
-   int   m_total_rank = 0;
+   private static WeightedEntry s_mempool[] = null;
+   private static int           s_next_instance = 0;
+   int   m_char_weight[] = null;
+   int   m_total_weight = 0;
    _str *m_text;
    int   m_lastslash = 0;
 
-   RankedEntry(_str *text = null)
+   WeightedEntry(_str *text = null)
    {
       m_text = text;
    }
@@ -55,36 +55,36 @@ class RankedEntry
    {
       m_lastslash = lastpos(FILESEP, *m_text);
    }
-   void clear_ranking()
+   void clear_weight()
    {
-      m_rank = null;
-      m_total_rank = 0;
+      m_char_weight = null;
+      m_total_weight = 0;
    }
-   void update_total_rank()
+   void update_total_weight()
    {
-      m_total_rank = 0;
-      foreach (auto rank in m_rank)
-         m_total_rank += rank;
+      m_total_weight = 0;
+      foreach (auto weight in m_char_weight)
+         m_total_weight += weight;
    }
-   void rank_char_at_pos(int chpos, int multiplier=1)
+   void weight_char_at_pos(int chpos, int multiplier=1)
    {
       _str ch = substr(*m_text, chpos, 1);
       _str pch = (chpos > 1) ? substr(*m_text, chpos-1, 1) : '';
       if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-         m_rank[chpos] = 4;
+         m_char_weight[chpos] = 4;
       else if (pch == FILESEP)
-         m_rank[chpos] = 3;
+         m_char_weight[chpos] = 3;
       else if (pch == '.')
-         m_rank[chpos] = 2;
+         m_char_weight[chpos] = 2;
       else
-         m_rank[chpos] = 1;
+         m_char_weight[chpos] = 1;
       if (chpos > m_lastslash)
-         m_rank[chpos] *= 2;
-      m_rank[chpos] *= multiplier;
+         m_char_weight[chpos] *= 2;
+      m_char_weight[chpos] *= multiplier;
    }
-   static RankedEntry * new(_str *text = null)
+   static WeightedEntry * new(_str *text = null)
    {
-      RankedEntry *entry = &s_mempool[s_next_instance++];
+      WeightedEntry *entry = &s_mempool[s_next_instance++];
       entry->m_text = text;
       return entry;
    }
@@ -95,22 +95,22 @@ class RankedEntry
    }
 };
 
-static void swap( RankedEntry* (&array)[], int a, int b );
+static void swap( WeightedEntry* (&array)[], int a, int b );
 
-static void quicksort(RankedEntry* (&list)[])
+static void quicksort(WeightedEntry* (&list)[])
 {
    rec_quicksort(list, 0, list._length()-1);
 }
 
-static int partition(RankedEntry* (&list)[], int l, int r)
+static int partition(WeightedEntry* (&list)[], int l, int r)
 {
    int i = l-1, j = r;
-   int value = list[r]->m_total_rank;
+   int value = list[r]->m_total_weight;
    loop
    {
-      while (list[++i]->m_total_rank > value)
+      while (list[++i]->m_total_weight > value)
          ;
-      while (value > list[--j]->m_total_rank)
+      while (value > list[--j]->m_total_weight)
       {
          if (j == 1)
             break;
@@ -123,7 +123,7 @@ static int partition(RankedEntry* (&list)[], int l, int r)
    return i;
 }
 
-static void rec_quicksort(RankedEntry* (&list)[], int l, int r)
+static void rec_quicksort(WeightedEntry* (&list)[], int l, int r)
 {
    if (r <= l) return;
    int i = partition(list, l, r);
@@ -131,12 +131,12 @@ static void rec_quicksort(RankedEntry* (&list)[], int l, int r)
    rec_quicksort(list, i+1, r);
 }
 
-static void swap(RankedEntry* (&array)[], int a, int b)
+static void swap(WeightedEntry* (&array)[], int a, int b)
 {
    if ( a < 0 || a >= array._length() || b < 0 || b >= array._length() )
       return;
 
-   RankedEntry* vA = array[a];
+   WeightedEntry* vA = array[a];
    array[a] = array[b];
    array[b] = vA;
 }
@@ -164,7 +164,7 @@ static void close_form()
 {
    s_files = null;
    s_files_last = 0;
-   RankedEntry.delete_all();
+   WeightedEntry.delete_all();
    p_active_form._delete_window();
 }
 
@@ -288,7 +288,7 @@ static _str make_regex( _str pattern )
    return lowcase(regex);
 }
 
-static boolean rank_exact_match(_str &pattern, int &match_start, RankedEntry &curr_entry)
+static boolean weight_exact_match(_str &pattern, int &match_start, WeightedEntry &curr_entry)
 {
    int chpos = pos( pattern, *curr_entry.m_text, match_start, 'I' );
    if (chpos == 0)
@@ -298,12 +298,12 @@ static boolean rank_exact_match(_str &pattern, int &match_start, RankedEntry &cu
    int last = match_start + pattern._length();
    for (chpos = match_start; chpos < last; ++chpos)
    {
-      curr_entry.rank_char_at_pos(chpos, 2);
+      curr_entry.weight_char_at_pos(chpos, 2);
    }
    return true;
 }
 
-static boolean rank_regex_match(_str &pattern, _str &regex, int &match_start, RankedEntry &curr_entry)
+static boolean weight_regex_match(_str &pattern, _str &regex, int &match_start, WeightedEntry &curr_entry)
 {
    int chpos = pos( regex, *curr_entry.m_text, match_start, 'UI' );
    if (chpos == 0)
@@ -315,22 +315,22 @@ static boolean rank_regex_match(_str &pattern, _str &regex, int &match_start, Ra
    {
       ch = substr(pattern, i, 1);
       chpos = pos(ch, *curr_entry.m_text, chpos, "I");
-      curr_entry.rank_char_at_pos(chpos);
+      curr_entry.weight_char_at_pos(chpos);
    }
    match_start = chpos;
    return true;
 }
 
-static void choose_max_entry(RankedEntry &max_entry, RankedEntry curr_entry)
+static void choose_max_entry(WeightedEntry &max_entry, WeightedEntry curr_entry)
 {
-   if (curr_entry.m_total_rank > max_entry.m_total_rank)
+   if (curr_entry.m_total_weight > max_entry.m_total_weight)
       max_entry = curr_entry;
 }
 
-static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
+static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
 {
    /*
-       Each character matched is ranked according to the following heruistics:
+       Each character matched is weighted according to the following heruistics:
 
          5 points for every character in an exact match.
          4 points for the first character, a character following a
@@ -339,7 +339,7 @@ static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
          2 points for a character following a '.'.
          1 point for any other character.
 
-       A rank is a sum of these points for each matched character.
+       Total weight for a match is the sum of these points for each matched character.
 
        optimization 1: if a single character pattern fails an exact match
          there is no need to check it for a pattern match.
@@ -352,17 +352,17 @@ static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
 
    max_entry.update_lastslash();
    int match_start = 1;
-   RankedEntry curr_entry = max_entry;
+   WeightedEntry curr_entry = max_entry;
    loop
    {
-      curr_entry.clear_ranking();
+      curr_entry.clear_weight();
 
-      if (!rank_exact_match(pattern, match_start, curr_entry))
+      if (!weight_exact_match(pattern, match_start, curr_entry))
          if (pattern_len == 1 || // optimization 1
-            !rank_regex_match(pattern, regex, match_start, curr_entry))
+            !weight_regex_match(pattern, regex, match_start, curr_entry))
             break;
 
-      curr_entry.update_total_rank();
+      curr_entry.update_total_weight();
       choose_max_entry(max_entry, curr_entry);
       ++match_start;
    }
@@ -374,19 +374,19 @@ static void highlight_text(int len, int offset, int color)
    _StreamMarkerSetTextColor( marker, color );
 }
 
-static void add_ranked_entry(RankedEntry &entry, int &offset)
+static void add_weighted_entry(WeightedEntry &entry, int &offset)
 {
    // add the text
    _str text = *entry.m_text"\n";
    opf_files._insert_text(text);
 
    // mark the text
-   if (entry.m_rank != null)
+   if (entry.m_char_weight != null)
    {
       int i, last = entry.m_text->_length();
       for (i = 1; i <= last; ++i)
       {
-         if (entry.m_rank[i])
+         if (entry.m_char_weight[i])
             highlight_text(1, offset+i-1, s_exactMatchColor);
       }
    }
@@ -400,27 +400,27 @@ static void opf_update_files(_str pattern)
    // clear list edit control
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
-   // build list of ranked entries
+   // build list of WeightedEntrys
    _str regex = make_regex(pattern);
    int pattern_len = pattern._length();
-   RankedEntry.delete_all();
-   RankedEntry *entries[] = null;
-   RankedEntry *entry;
+   WeightedEntry.delete_all();
+   WeightedEntry *entries[] = null;
+   WeightedEntry *entry;
    int idx, last_file = 0, last = s_files._length();
    for (idx = 0; idx < last; ++idx)
    {
-      entry = RankedEntry.new(&s_files[idx]);
+      entry = WeightedEntry.new(&s_files[idx]);
 
-      rank_match(pattern, regex, *entry);
+      weight_match(pattern, regex, *entry);
 
-      if (entry->m_total_rank > 0 || pattern_len == 0)
+      if (entry->m_total_weight > 0 || pattern_len == 0)
       {
          entries[last_file] = entry;
          ++last_file;
       }
    }
 
-   // sort list by rank
+   // sort list by weight
    if (pattern != '')
       quicksort(entries);
 
@@ -428,8 +428,8 @@ static void opf_update_files(_str pattern)
    int offset = 0;
    for (idx = 0; idx < entries._length(); ++idx)
    {
-      if (entries[idx]->m_total_rank || pattern == '')
-         add_ranked_entry(*entries[idx], offset);
+      if (entries[idx]->m_total_weight || pattern == '')
+         add_weighted_entry(*entries[idx], offset);
    }
 
    // update status
