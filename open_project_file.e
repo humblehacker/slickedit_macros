@@ -28,7 +28,6 @@
 #include "slick.sh"
 #include "form_open_project_file.e"
 #import "editfont.e"
-#import "quicksort.e"
 
 #pragma option( strict, on )
 
@@ -39,17 +38,76 @@ defeventtab open_project_file;
 #define OPF_EXACT_MATCH   5
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
-struct RankedEntry
+class RankedEntry
 {
-   int   rank[];
-   int   total_rank;
-   _str *text;
+   private static RankedEntry s_mempool[] = null;
+   private static int         s_next_instance = 0;
+   int   m_rank[] = null;
+   int   m_total_rank = 0;
+   _str *m_text;
+   RankedEntry(_str *text = null)
+   {
+      m_text = text;
+   }
+   static RankedEntry * new(_str *text = null)
+   {
+      RankedEntry *entry = &s_mempool[s_next_instance++];
+      entry->m_text = text;
+      return entry;
+   }
+   static void delete_all()
+   {
+      s_mempool = null;
+      s_next_instance = 0;
+   }
 };
 
-static int RankedEntryKeyFunc(typeless &entry)
+static void swap( RankedEntry* (&array)[], int a, int b );
+
+static void quicksort(RankedEntry* (&list)[])
 {
-   return ((RankedEntry)entry).total_rank;
+   rec_quicksort(list, 0, list._length()-1);
 }
+
+static int partition(RankedEntry* (&list)[], int l, int r)
+{
+   int i = l-1, j = r;
+   int value = list[r]->m_total_rank;
+   loop
+   {
+      while (list[++i]->m_total_rank > value)
+         ;
+      while (value > list[--j]->m_total_rank)
+      {
+         if (j == 1)
+            break;
+      }
+      if (i >= j)
+         break;
+      swap(list, i, j);
+   }
+   swap(list, i, r);
+   return i;
+}
+
+static void rec_quicksort(RankedEntry* (&list)[], int l, int r)
+{
+   if (r <= l) return;
+   int i = partition(list, l, r);
+   rec_quicksort(list, l, i-1);
+   rec_quicksort(list, i+1, r);
+}
+
+static void swap(RankedEntry* (&array)[], int a, int b)
+{
+   if ( a < 0 || a >= array._length() || b < 0 || b >= array._length() )
+      return;
+
+   RankedEntry* vA = array[a];
+   array[a] = array[b];
+   array[b] = vA;
+}
+
 
 static _str s_files[];
 static int  s_files_last        =  0;
@@ -73,6 +131,7 @@ static void close_form()
 {
    s_files = null;
    s_files_last = 0;
+   RankedEntry.delete_all();
    p_active_form._delete_window();
 }
 
@@ -199,13 +258,13 @@ static _str make_regex( _str pattern )
 
 static boolean rank_exact_match(_str &pattern, int lastslash, int &search_from, RankedEntry &curr_entry)
 {
-   if (pos( pattern, *curr_entry.text, search_from, 'I' ) != 0)
+   if (pos( pattern, *curr_entry.m_text, search_from, 'I' ) != 0)
    {
       search_from = pos('S');
       int i, last = search_from + pattern._length();
       for (i = search_from; i < last; ++i)
       {
-         curr_entry.rank[i] = OPF_EXACT_MATCH * ((i > lastslash) ? 2 : 1);
+         curr_entry.m_rank[i] = OPF_EXACT_MATCH * ((i > lastslash) ? 2 : 1);
       }
       return true;
    }
@@ -215,7 +274,7 @@ static boolean rank_exact_match(_str &pattern, int lastslash, int &search_from, 
 
 static boolean rank_regex_match(_str &pattern, _str &regex, int lastslash, int &search_from, RankedEntry &curr_entry)
 {
-   int chpos = pos( regex, *curr_entry.text, search_from, 'UI' );
+   int chpos = pos( regex, *curr_entry.m_text, search_from, 'UI' );
    if (chpos == 0)
       return false;
 
@@ -225,19 +284,19 @@ static boolean rank_regex_match(_str &pattern, _str &regex, int lastslash, int &
    for (i = 1; i <= last; ++i)
    {
       ch = substr(pattern, i, 1);
-      chpos = pos(ch, *curr_entry.text, chpos, "I");
-      ch = substr(*curr_entry.text, chpos, 1);
-      pch = (chpos > 1) ? substr(*curr_entry.text, chpos-1, 1) : '';
+      chpos = pos(ch, *curr_entry.m_text, chpos, "I");
+      ch = substr(*curr_entry.m_text, chpos, 1);
+      pch = (chpos > 1) ? substr(*curr_entry.m_text, chpos-1, 1) : '';
       if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-         curr_entry.rank[chpos] = 4;
+         curr_entry.m_rank[chpos] = 4;
       else if (pch == FILESEP)
-         curr_entry.rank[chpos] = 3;
+         curr_entry.m_rank[chpos] = 3;
       else if (pch == '.')
-         curr_entry.rank[chpos] = 2;
+         curr_entry.m_rank[chpos] = 2;
       else
-         curr_entry.rank[chpos] = 1;
+         curr_entry.m_rank[chpos] = 1;
       if (chpos > lastslash)
-         curr_entry.rank[chpos] *= 2;
+         curr_entry.m_rank[chpos] *= 2;
    }
    search_from = chpos;
    return true;
@@ -245,20 +304,20 @@ static boolean rank_regex_match(_str &pattern, _str &regex, int lastslash, int &
 
 static void initialize_ranked_entry(RankedEntry &curr_entry)
 {
-   curr_entry.rank = null;
-   curr_entry.total_rank = 0;
+   curr_entry.m_rank = null;
+   curr_entry.m_total_rank = 0;
 }
 
 static void calculate_total_rank(RankedEntry &curr_entry)
 {
-   curr_entry.total_rank = 0;
-   foreach (auto rank in curr_entry.rank)
-      curr_entry.total_rank += rank;
+   curr_entry.m_total_rank = 0;
+   foreach (auto rank in curr_entry.m_rank)
+      curr_entry.m_total_rank += rank;
 }
 
 static void choose_max_entry(RankedEntry &max_entry, RankedEntry curr_entry)
 {
-   if (curr_entry.total_rank > max_entry.total_rank)
+   if (curr_entry.m_total_rank > max_entry.m_total_rank)
       max_entry = curr_entry;
 }
 
@@ -285,7 +344,7 @@ static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
    if (pattern_len == 0)
       return;
 
-   int lastslash = lastpos(FILESEP, *max_entry.text);
+   int lastslash = lastpos(FILESEP, *max_entry.m_text);
    int search_from = 1;
    RankedEntry curr_entry = max_entry;
    loop
@@ -312,16 +371,16 @@ static void highlight_text(int len, int offset, int color)
 static void add_ranked_entry(RankedEntry &entry, int &offset)
 {
    // add the text
-   _str text = *entry.text"\n";
+   _str text = *entry.m_text"\n";
    opf_files._insert_text(text);
 
    // mark the text
-   if (entry.rank != null)
+   if (entry.m_rank != null)
    {
-      int i, last = entry.text->_length();
+      int i, last = entry.m_text->_length();
       for (i = 1; i <= last; ++i)
       {
-         if (entry.rank[i])
+         if (entry.m_rank[i])
             highlight_text(1, offset+i-1, s_exactMatchColor);
       }
    }
@@ -335,37 +394,37 @@ static void opf_update_files(_str pattern)
    // clear list edit control
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
-   profile("on");
    // build list of ranked entries
    _str regex = make_regex(pattern);
-   RankedEntry entries[] = null;
+   int pattern_len = pattern._length();
+   RankedEntry.delete_all();
+   RankedEntry *entries[] = null;
+   RankedEntry *entry;
    int idx, last_file = 0, last = s_files._length();
    for (idx = 0; idx < last; ++idx)
    {
-      RankedEntry entry;
-      entry.text = &s_files[idx];
-      entry.total_rank = 0;
-      entry.rank = null;
+      entry = RankedEntry.new(&s_files[idx]);
 
-      rank_match(pattern, regex, entry);
+      rank_match(pattern, regex, *entry);
 
-      if (entry.total_rank || pattern._length() == 0)
-         entries[last_file++] = entry;
+      if (entry->m_total_rank > 0 || pattern_len == 0)
+      {
+         entries[last_file] = entry;
+         ++last_file;
+      }
    }
 
    // sort list by rank
    if (pattern != '')
-      quicksort(entries, 0, entries._length()-1, RankedEntryKeyFunc);
+      quicksort(entries);
 
    // add entries to list edit control
    int offset = 0;
    for (idx = 0; idx < entries._length(); ++idx)
    {
-      if (entries[idx].total_rank || pattern == '')
-         add_ranked_entry(entries[idx], offset);
+      if (entries[idx]->m_total_rank || pattern == '')
+         add_ranked_entry(*entries[idx], offset);
    }
-
-   profile("view");
 
    // update status
    opf_status2.p_caption = entries._length() " of " s_files._length() " matched";
