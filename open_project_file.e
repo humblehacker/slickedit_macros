@@ -66,6 +66,22 @@ class RankedEntry
       foreach (auto rank in m_rank)
          m_total_rank += rank;
    }
+   void rank_char_at_pos(int chpos, int multiplier=1)
+   {
+      _str ch = substr(*m_text, chpos, 1);
+      _str pch = (chpos > 1) ? substr(*m_text, chpos-1, 1) : '';
+      if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+         m_rank[chpos] = 4;
+      else if (pch == FILESEP)
+         m_rank[chpos] = 3;
+      else if (pch == '.')
+         m_rank[chpos] = 2;
+      else
+         m_rank[chpos] = 1;
+      if (chpos > m_lastslash)
+         m_rank[chpos] *= 2;
+      m_rank[chpos] *= multiplier;
+   }
    static RankedEntry * new(_str *text = null)
    {
       RankedEntry *entry = &s_mempool[s_next_instance++];
@@ -272,19 +288,6 @@ static _str make_regex( _str pattern )
    return lowcase(regex);
 }
 
-static int rank_char_at_pos(_str text, int chpos)
-{
-   _str ch = substr(text, chpos, 1);
-   _str pch = (chpos > 1) ? substr(text, chpos-1, 1) : '';
-   if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-      return 4;
-   if (pch == FILESEP)
-      return 3;
-   if (pch == '.')
-      return 2;
-   return 1;
-}
-
 static boolean rank_exact_match(_str &pattern, int &match_start, RankedEntry &curr_entry)
 {
    int chpos = pos( pattern, *curr_entry.m_text, match_start, 'I' );
@@ -295,9 +298,7 @@ static boolean rank_exact_match(_str &pattern, int &match_start, RankedEntry &cu
    int last = match_start + pattern._length();
    for (chpos = match_start; chpos < last; ++chpos)
    {
-      curr_entry.m_rank[chpos] = rank_char_at_pos(*curr_entry.m_text, chpos) * 2;
-      if (chpos > curr_entry.m_lastslash)
-         curr_entry.m_rank[chpos] *= 2;
+      curr_entry.rank_char_at_pos(chpos, 2);
    }
    return true;
 }
@@ -314,9 +315,7 @@ static boolean rank_regex_match(_str &pattern, _str &regex, int &match_start, Ra
    {
       ch = substr(pattern, i, 1);
       chpos = pos(ch, *curr_entry.m_text, chpos, "I");
-      curr_entry.m_rank[chpos] = rank_char_at_pos(*curr_entry.m_text, chpos);
-      if (chpos > curr_entry.m_lastslash)
-         curr_entry.m_rank[chpos] *= 2;
+      curr_entry.rank_char_at_pos(chpos);
    }
    match_start = chpos;
    return true;
