@@ -66,7 +66,7 @@ definit()
 static void close_form()
 {
    s_files = null;
-   s_files_last = 0; 
+   s_files_last = 0;
    p_active_form._delete_window();
 }
 
@@ -182,7 +182,7 @@ static _str make_regex( _str pattern )
    for (i = 1; i <= last; ++i)
    {
       ch = substr(pattern, i, 1);
-      if (pos( ch, regex_chars ) != 0) 
+      if (pos( ch, regex_chars ) != 0)
          regex :+= "\\"; // escape regex characters
       regex :+= ch;
       regex :+= ".*";
@@ -224,7 +224,7 @@ static boolean rank_regex_match(_str &pattern, _str &regex, int lastslash, int &
       pch = (chpos > 1) ? substr(*curr_entry.text, chpos-1, 1) : '';
       if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
          curr_entry.rank[chpos] = 4;
-      else if (pch == '/' || pch == '\\')
+      else if (pch == FILESEP)
          curr_entry.rank[chpos] = 3;
       else if (pch == '.')
          curr_entry.rank[chpos] = 2;
@@ -279,7 +279,7 @@ static void rank_match(_str &pattern, _str &regex, RankedEntry &max_entry)
    if (pattern_len == 0)
       return;
 
-   int lastslash = lastpos('/', *max_entry.text);
+   int lastslash = lastpos(FILESEP, *max_entry.text);
    int search_from = 1;
    RankedEntry curr_entry = max_entry;
    loop
@@ -333,7 +333,7 @@ static void opf_update_files(_str pattern)
    _str regex = make_regex(pattern);
    RankedEntry entries[] = null;
    int idx, last_file = 0, last = s_files._length();
-   for (idx = 0; idx < s_files._length(); ++idx)
+   for (idx = 0; idx < last; ++idx)
    {
       RankedEntry entry;
       entry.text = &s_files[idx];
