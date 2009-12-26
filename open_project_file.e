@@ -41,7 +41,6 @@ defeventtab open_project_file;
 class WeightedEntry
 {
    private static WeightedEntry s_mempool[] = null;
-   private static int           s_next_instance = 0;
    int   m_char_weight[] = null;
    int   m_total_weight = 0;
    _str *m_text;
@@ -64,15 +63,30 @@ class WeightedEntry
    {
       m_total_weight = 0;
       foreach (auto weight in m_char_weight)
-         m_total_weight += weight;
+      {
+         if (weight != null)
+            m_total_weight += weight;
+      }
    }
    void weight_char_at_pos(int chpos, int multiplier=1)
    {
+      /*
+          Each character matched is weighted according to the following heruistics:
+
+            4 points for the first character, or for a character immediately
+                     following a '/' or '\\'.
+            3 points a character following a '_', or a capital letter immediately
+                     following a lowercase letter.
+            2 points for a character following a '.'.
+            1 point for any other character.
+      */
+
       _str ch = substr(*m_text, chpos, 1);
-      _str pch = (chpos > 1) ? substr(*m_text, chpos-1, 1) : '';
-      if (chpos == 1 || pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+      int pchpos = chpos-1;
+      _str pch = (pchpos) ? substr(*m_text, pchpos, 1) : '';
+      if (chpos == 1 || pch == FILESEP)
          m_char_weight[chpos] = 4;
-      else if (pch == FILESEP)
+      else if (pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
          m_char_weight[chpos] = 3;
       else if (pch == '.')
          m_char_weight[chpos] = 2;
@@ -81,19 +95,56 @@ class WeightedEntry
       if (chpos > m_lastslash)
          m_char_weight[chpos] *= 2;
       m_char_weight[chpos] *= multiplier;
+      // give more weight to contiguous blocks
+      if (pchpos && m_char_weight[pchpos] != null &&
+          m_char_weight[pchpos] > m_char_weight[chpos])
+      {
+         ++m_char_weight[chpos];
+         ch = substr(*m_text, chpos+1, 1);
+         // give more weight to last char of contiguous block if at word end
+         if (pos("[."FILESEP" ]", ch, 1, "U"))
+            ++m_char_weight[chpos];
+      }
    }
    static WeightedEntry * new(_str *text = null)
    {
-      WeightedEntry *entry = &s_mempool[s_next_instance++];
+      WeightedEntry *entry = &s_mempool[s_mempool._length()];
       entry->m_text = text;
       return entry;
    }
    static void delete_all()
    {
       s_mempool = null;
-      s_next_instance = 0;
    }
 };
+
+static void bucketsort(WeightedEntry* (&entries)[])
+{
+   WeightedEntry* buckets[][];
+   int bucket_last[];
+
+   // distribution
+   WeightedEntry *entry = null;
+   foreach (entry in entries)
+   {
+      WeightedEntry *(*bucket)[] = &buckets[entry->m_total_weight];
+      (*bucket)[bucket->_length()] = entry;
+   }
+
+   entries = null;
+
+   // aggregation
+   int last_entry = 0;
+   WeightedEntry* bucket[];
+   int i;
+   for (i = buckets._length(); i >= 0; --i)
+   {
+      foreach (entry in buckets[i])
+      {
+         entries[entries._length()] = entry;
+      }
+   }
+}
 
 static void swap( WeightedEntry* (&array)[], int a, int b );
 
@@ -296,7 +347,7 @@ static boolean weight_exact_match(_str &pattern, int &match_start, WeightedEntry
 
    match_start = chpos;
    int last = match_start + pattern._length();
-   for (chpos = match_start; chpos < last; ++chpos)
+   for (; chpos < last; ++chpos)
    {
       curr_entry.weight_char_at_pos(chpos, 2);
    }
@@ -309,6 +360,7 @@ static boolean weight_regex_match(_str &pattern, _str &regex, int &match_start, 
    if (chpos == 0)
       return false;
 
+   match_start = chpos;
    _str ch;
    int i, last = pattern._length();
    for (i = 1; i <= last; ++i)
@@ -317,7 +369,6 @@ static boolean weight_regex_match(_str &pattern, _str &regex, int &match_start, 
       chpos = pos(ch, *curr_entry.m_text, chpos, "I");
       curr_entry.weight_char_at_pos(chpos);
    }
-   match_start = chpos;
    return true;
 }
 
@@ -329,23 +380,6 @@ static void choose_max_entry(WeightedEntry &max_entry, WeightedEntry curr_entry)
 
 static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
 {
-   /*
-       Each character matched is weighted according to the following heruistics:
-
-         5 points for every character in an exact match.
-         4 points for the first character, a character following a
-                  '_', or a capital letter.
-         3 points for a character immediately following a '/' or '\\'.
-         2 points for a character following a '.'.
-         1 point for any other character.
-
-       Total weight for a match is the sum of these points for each matched character.
-
-       optimization 1: if a single character pattern fails an exact match
-         there is no need to check it for a pattern match.
-   */
-
-   opf_status1.p_caption = regex;
    int pattern_len = pattern._length();
    if (pattern_len == 0)
       return;
@@ -358,7 +392,7 @@ static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
       curr_entry.clear_weight();
 
       if (!weight_exact_match(pattern, match_start, curr_entry))
-         if (pattern_len == 1 || // optimization 1
+         if (pattern_len == 1 || // if single char fails, look no further.
             !weight_regex_match(pattern, regex, match_start, curr_entry))
             break;
 
@@ -368,9 +402,9 @@ static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
    }
 }
 
-static void highlight_text(int len, int offset, int color)
+static void highlight_text(int offset, int len, int color)
 {
-   int marker = _StreamMarkerAdd(opf_files, offset, len, true, 0, s_markerType, '');
+   int marker = _StreamMarkerAdd(opf_files, offset, len, false, 0, s_markerType, '');
    _StreamMarkerSetTextColor( marker, color );
 }
 
@@ -387,7 +421,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
       for (i = 1; i <= last; ++i)
       {
          if (entry.m_char_weight[i])
-            highlight_text(1, offset+i-1, s_exactMatchColor);
+            highlight_text(offset+i-1, 1, s_exactMatchColor);
       }
    }
 
@@ -402,6 +436,7 @@ static void opf_update_files(_str pattern)
 
    // build list of WeightedEntrys
    _str regex = make_regex(pattern);
+   opf_status1.p_caption = regex;
    int pattern_len = pattern._length();
    WeightedEntry.delete_all();
    WeightedEntry *entries[] = null;
@@ -422,14 +457,14 @@ static void opf_update_files(_str pattern)
 
    // sort list by weight
    if (pattern != '')
-      quicksort(entries);
+      bucketsort(entries);
 
    // add entries to list edit control
    int offset = 0;
-   for (idx = 0; idx < entries._length(); ++idx)
+   foreach (entry in entries)
    {
-      if (entries[idx]->m_total_weight || pattern == '')
-         add_weighted_entry(*entries[idx], offset);
+      if (entry->m_total_weight || pattern == '')
+         add_weighted_entry(*entry, offset);
    }
 
    // update status
