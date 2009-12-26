@@ -194,7 +194,6 @@ static void swap(WeightedEntry* (&array)[], int a, int b)
 
 
 static _str s_files[];
-static int  s_files_last        =  0;
 static int  opf_filt_font       =  CFG_DIALOG;
 static int  opf_timer_handle    =  0;
 static int  s_markerType        = -1;
@@ -213,10 +212,13 @@ definit()
 
 static void close_form()
 {
-   s_files = null;
-   s_files_last = 0;
    WeightedEntry.delete_all();
    p_active_form._delete_window();
+}
+
+void _prjupdate_opf()
+{
+   s_files = null;
 }
 
 static int check_for_project()
@@ -292,7 +294,7 @@ static void parse_project( int xml, int index, _str basic_name )
       if ((_xmlcfg_get_name( xml, idx ) == "F") && (_xmlcfg_get_attribute( xml, idx, "N", "" ) != ""))
       {
          name = _xmlcfg_get_attribute( xml, idx, "N", "" );
-         s_files[s_files_last++] = name;
+         s_files[s_files._length()] = name;
       }
 
       child = _xmlcfg_get_first_child( xml, idx );
@@ -500,21 +502,28 @@ void opf_files.on_create()
    p_KeepPictureGutter = false;
    p_readonly_mode = true;
 
-   int xml_id = 0;
-   int no_files = 0;
-   int i;
-
-   if (preparse_project( &xml_id ))
+   if (s_files._isempty())
    {
-      _message_box( "Failed to load project file..." );
-      close_form();
+      message("loading project paths...");
+      int xml_id = 0;
+      int no_files = 0;
+
+      if (preparse_project( &xml_id ))
+      {
+         _message_box( "Failed to load project file..." );
+         close_form();
+      }
+
+      no_files = project_find_files( xml_id, 0 );
+      s_files = null;
+      parse_project( xml_id, no_files, "" );
+      s_files._sort('F');
+      forget_project( xml_id );
+      message("Done.");
    }
 
-   no_files = project_find_files( xml_id, 0 );
-   s_files = null;
-   s_files_last = 0;
-   parse_project( xml_id, no_files, "" );
-   s_files._sort('F');
+   _assert(!s_files._isempty());
+
    int idx;
    for (idx = 0; idx < s_files._length(); ++idx)
    {
@@ -523,7 +532,6 @@ void opf_files.on_create()
    opf_status2.p_caption = "0 of " s_files._length() " matched";
    opf_files.top();
    opf_files.refresh();
-   forget_project( xml_id );
 }
 
 void open_project_file.on_resize()
