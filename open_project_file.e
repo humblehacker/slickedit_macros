@@ -28,6 +28,7 @@
 #include "slick.sh"
 #include "form_open_project_file.e"
 #import "editfont.e"
+#include "progress.e"
 
 #pragma option( strict, on )
 
@@ -509,43 +510,6 @@ void opf_files.on_create()
    p_KeepPictureGutter = false;
    p_readonly_mode = true;
 
-   if (s_files._isempty())
-   {
-      _assert(s_entries._isempty());
-      message("loading project paths...");
-      int xml_id = 0;
-      int no_files = 0;
-
-      if (preparse_project( &xml_id ))
-      {
-         _message_box( "Failed to load project file..." );
-         close_form();
-      }
-
-      no_files = project_find_files( xml_id, 0 );
-      s_files = null;
-      s_entries = null;
-      parse_project( xml_id, no_files, "" );
-      s_files._sort('F');
-      WeightedEntry *entry;
-      int i;
-      for (i = 0; i < s_files._length(); ++i)
-      {
-         entry = &s_entries[s_entries._length()];
-         *entry = null;
-         // SlickC bug: I get 'invalid object' error on the following call
-         // to set_text() unless I set m_text beforehand.
-         entry->m_text = &s_files[i];
-         entry->set_text(&s_files[i]);
-         entry->calc_intrinsic_weights();
-      }
-      forget_project( xml_id );
-      message("Done.");
-   }
-
-   _assert(!s_entries._isempty());
-   _assert(!s_files._isempty());
-
    int idx;
    for (idx = 0; idx < s_files._length(); ++idx)
    {
@@ -669,6 +633,47 @@ def  '\'          = opf_on_key;
 
 _command void _open_project_file() name_info( ',' VSARG2_MACRO )
 {
+   if (s_files._isempty())
+   {
+      _assert(s_entries._isempty());
+      message("loading project paths...");
+      int xml_id = 0;
+      int no_files = 0;
+
+      if (preparse_project( &xml_id ))
+      {
+         _message_box( "Failed to load project file..." );
+         return;
+      }
+
+      no_files = project_find_files( xml_id, 0 );
+      s_files = null;
+      s_entries = null;
+      parse_project( xml_id, no_files, "" );
+      s_files._sort('F');
+      WeightedEntry *entry;
+      int i, last = s_files._length();
+      {
+         Progress p("Calculating intrinsic weights", last);
+         for (i = 0; i < last; ++i)
+         {
+            entry = &s_entries[s_entries._length()];
+            *entry = null;
+            // SlickC bug: I get 'invalid object' error on the following call
+            // to set_text() unless I set m_text beforehand.
+            entry->m_text = &s_files[i];
+            entry->set_text(&s_files[i]);
+            entry->calc_intrinsic_weights();
+            p.update(*entry->m_text, i);
+         }
+         forget_project( xml_id );
+         message("Done.");
+      }
+   }
+
+   _assert(!s_entries._isempty());
+   _assert(!s_files._isempty());
+
    show( "-mdi -xy open_project_file" );
 }
 
