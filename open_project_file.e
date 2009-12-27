@@ -29,275 +29,30 @@
 #include "form_open_project_file.e"
 #import "editfont.e"
 #include "progress.e"
+#include "weightedentry.e"
 
 #pragma option( strict, on )
 
 defeventtab open_project_file;
 
-#define OPF_NO_MATCH      0
-#define OPF_PATTERN_MATCH 1
-#define OPF_EXACT_MATCH   5
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
-
-class WeightedEntry
-{
-   int   m_intrinsic_char_weight[] = null;
-   int   m_char_weight[] = null;
-   int   m_total_weight = 0;
-   _str *m_text;
-   int   m_lastslash = 0;
-   int   m_match_start = 0;
-
-   WeightedEntry()
-   {
-      m_text = null;
-   }
-   void set_text(_str *text)
-   {
-      m_text = text;
-      m_lastslash = lastpos(FILESEP, *m_text);
-   }
-   void clear_weight()
-   {
-      m_char_weight = null;
-      m_total_weight = 0;
-   }
-   void update_total_weight()
-   {
-      m_total_weight = 0;
-      foreach (auto weight in m_char_weight)
-      {
-         if (weight != null)
-            m_total_weight += weight;
-      }
-   }
-   void calc_intrinsic_weights()
-   {
-      /*
-          Each character matched is weighted according to the following heruistics:
-
-            4 points for the first character, or for a character immediately
-                     following a '/' or '\\'.
-            3 points a character following a '_', or a capital letter immediately
-                     following a lowercase letter.
-            2 points for a character following a '.'.
-            1 point for any other character.
-      */
-
-      _str ch;
-      int pchpos;
-      int chpos, last = m_text->_length();
-      for (chpos = 1; chpos <= last; ++chpos)
-      {
-         m_intrinsic_char_weight[chpos] = 1;
-         pchpos = chpos-1;
-         _str pch = (pchpos) ? substr(*m_text, pchpos, 1) : '';
-         if (chpos == 1 || pch == FILESEP)
-            m_intrinsic_char_weight[chpos] = 4;
-         else if (pch == '.')
-            m_intrinsic_char_weight[chpos] = 2;
-         else
-         {
-            ch = substr(*m_text, chpos, 1);
-            if (pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-               m_intrinsic_char_weight[chpos] = 3;
-         }
-      }
-   }
-   void weight_char_at_pos(int chpos, int multiplier=1)
-   {
-      m_char_weight[chpos] = m_intrinsic_char_weight[chpos];
-
-      if (chpos > m_lastslash)
-         m_char_weight[chpos] *= 2;
-      m_char_weight[chpos] *= multiplier;
-      // give more weight to contiguous blocks
-      int pchpos = chpos - 1;
-      if (pchpos && m_char_weight[pchpos] != null &&
-          m_char_weight[pchpos] > m_char_weight[chpos])
-      {
-         ++m_char_weight[chpos];
-         _str ch = substr(*m_text, chpos+1, 1);
-         // give more weight to last char of contiguous block if at word end
-         if (pos("[."FILESEP" ]", ch, 1, "U"))
-            ++m_char_weight[chpos];
-      }
-   }
-   boolean weight_exact_match(_str &pattern)
-   {
-      int chpos = pos( pattern, *m_text, m_match_start, 'I' );
-      if (chpos == 0)
-         return false;
-
-      clear_weight();
-      m_match_start = chpos;
-      int last = m_match_start + pattern._length();
-      for (; chpos < last; ++chpos)
-      {
-         weight_char_at_pos(chpos, 2);
-      }
-      return true;
-   }
-   boolean weight_regex_match(_str &pattern, _str &regex)
-   {
-      int chpos = pos( regex, *m_text, m_match_start, 'UI' );
-      if (chpos == 0)
-         return false;
-
-      clear_weight();
-      m_match_start = chpos;
-      _str ch;
-      int i, last = pattern._length();
-      for (i = 1; i <= last; ++i)
-      {
-         ch = substr(pattern, i, 1);
-         chpos = pos(ch, *m_text, chpos, "I");
-         weight_char_at_pos(chpos);
-      }
-      return true;
-   }
-   boolean weight_single_match(_str &pattern, _str &regex)
-   {
-      if (!weight_exact_match(pattern))
-         if (pattern._length() == 1 || // if single char fails, look no further.
-             !weight_regex_match(pattern, regex))
-            return false;
-
-      update_total_weight();
-      return true;
-   }
-   void weight_match(_str &pattern, _str &regex)
-   {
-      int pattern_len = pattern._length();
-      if (pattern_len == 0)
-      {
-         clear_weight();
-         return;
-      }
-
-      int max_weight = 0, max_match_start = 1;
-      m_match_start = 1;
-      loop
-      {
-         if (!weight_single_match(pattern, regex))
-            break;
-
-         if (m_total_weight > max_weight)
-         {
-            max_weight = m_total_weight;
-            max_match_start = m_match_start;
-         }
-         ++m_match_start;
-      }
-
-      if (!max_weight)
-      {
-         clear_weight();
-         return;
-      }
-
-      // Optimization: the last match is most likely to be the heaviest,
-      // so we will only have to go back and re-weigh in rare cases.
-      if (max_weight != m_total_weight)
-      {
-         m_match_start = max_match_start;
-         weight_single_match(pattern, regex);
-      }
-   }
-
-};
-
-static void bucketsort(WeightedEntry* (&entries)[])
-{
-   WeightedEntry* buckets[][];
-
-   // distribution
-   WeightedEntry *entry = null;
-   foreach (entry in entries)
-   {
-      WeightedEntry *(*bucket)[] = &buckets[entry->m_total_weight];
-      (*bucket)[bucket->_length()] = entry;
-   }
-
-   entries = null;
-
-   // aggregation
-   int last_entry = 0;
-   WeightedEntry* bucket[];
-   int i;
-   for (i = buckets._length(); i >= 0; --i)
-   {
-      foreach (entry in buckets[i])
-      {
-         entries[entries._length()] = entry;
-      }
-   }
-}
-
-static void swap( WeightedEntry* (&array)[], int a, int b );
-
-static void quicksort(WeightedEntry* (&list)[])
-{
-   rec_quicksort(list, 0, list._length()-1);
-}
-
-static int partition(WeightedEntry* (&list)[], int l, int r)
-{
-   int i = l-1, j = r;
-   int value = list[r]->m_total_weight;
-   loop
-   {
-      while (list[++i]->m_total_weight > value)
-         ;
-      while (value > list[--j]->m_total_weight)
-      {
-         if (j == 1)
-            break;
-      }
-      if (i >= j)
-         break;
-      swap(list, i, j);
-   }
-   swap(list, i, r);
-   return i;
-}
-
-static void rec_quicksort(WeightedEntry* (&list)[], int l, int r)
-{
-   if (r <= l) return;
-   int i = partition(list, l, r);
-   rec_quicksort(list, l, i-1);
-   rec_quicksort(list, i+1, r);
-}
-
-static void swap(WeightedEntry* (&array)[], int a, int b)
-{
-   if ( a < 0 || a >= array._length() || b < 0 || b >= array._length() )
-      return;
-
-   WeightedEntry* vA = array[a];
-   array[a] = array[b];
-   array[b] = vA;
-}
-
 
 static _str s_files[];
 static WeightedEntry s_entries[];
+
 static int  opf_filt_font       =  CFG_DIALOG;
 static int  opf_timer_handle    =  0;
-static int  s_markerType        = -1;
-static int  s_exactMatchColor   = -1;
+static int  s_marker_type       = -1;
+static int  s_match_color       = -1;
 static int  s_partialMatchColor = -1;
 
 definit()
 {
-   s_files             = null;
-   s_entries           = null;
-   s_markerType        = _MarkerTypeAlloc();
-   s_exactMatchColor   = _AllocColor();
-   s_partialMatchColor = _AllocColor();
-   _default_color( s_exactMatchColor,   0xffffff, _rgb(255,128,0),   F_BOLD );
-   _default_color( s_partialMatchColor, 0xffffff, _rgb(128,128,128), F_BOLD );
+   s_files         = null;
+   s_entries       = null;
+   s_marker_type   = _MarkerTypeAlloc();
+   s_match_color   = _AllocColor();
+   _default_color( s_match_color,   0xffffff, _rgb(255,128,0),   F_BOLD );
 }
 
 static void close_form()
@@ -313,9 +68,7 @@ void _prjupdate_opf()
 
 static int check_for_project()
 {
-   _str ext;
-
-   ext = _project_get_filename();
+   _str ext = _project_get_filename();
 
    if (strcmp( substr( ext, length( ext ) - 2, 3 ), "vpe" ) == 0)
    {
@@ -338,8 +91,6 @@ static int preparse_project( int *id )
 
 static int project_find_files( int xml, int index )
 {
-   int temp;
-
    if (index < 0)
    {
       return 0;
@@ -350,7 +101,7 @@ static int project_find_files( int xml, int index )
       return index;
    }
 
-   temp = project_find_files( xml, _xmlcfg_get_first_child( xml, index ) );
+   int temp = project_find_files( xml, _xmlcfg_get_first_child( xml, index ) );
    if (temp != 0)
    {
       return temp;
@@ -367,17 +118,13 @@ static int project_find_files( int xml, int index )
 
 static void parse_project( int xml, int index, _str basic_name )
 {
-   int idx;
-   int child;
-   int how;
-   _str name;
-
    if (index < 0)
       return;
 
-   idx = index;
+   int child;
+   _str name;
+   int idx = index;
    int idx2;
-   int new_idx;
 
    do
    {
@@ -433,7 +180,7 @@ static _str make_regex( _str pattern )
 
 static void highlight_text(int offset, int len, int color)
 {
-   int marker = _StreamMarkerAdd(opf_files, offset, len, false, 0, s_markerType, '');
+   int marker = _StreamMarkerAdd(opf_files, offset, len, false, 0, s_marker_type, '');
    _StreamMarkerSetTextColor( marker, color );
 }
 
@@ -450,7 +197,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
       for (i = 1; i <= last; ++i)
       {
          if (entry.m_char_weight[i])
-            highlight_text(offset+i-1, 1, s_exactMatchColor);
+            highlight_text(offset+i-1, 1, s_match_color);
       }
    }
 
@@ -491,7 +238,7 @@ static void opf_update_files(_str pattern)
    int offset = 0;
    foreach (entry in entries)
    {
-      if (entry->m_total_weight || pattern == '')
+      if (entry->m_total_weight || pattern._isempty())
          add_weighted_entry(*entry, offset);
    }
 
@@ -528,10 +275,9 @@ void opf_files.on_create()
    p_KeepPictureGutter = false;
    p_readonly_mode = true;
 
-   int idx;
-   for (idx = 0; idx < s_files._length(); ++idx)
+   foreach (auto file in s_files)
    {
-      opf_files._insert_text(s_files[idx]"\n");
+      opf_files._insert_text(file"\n");
    }
    opf_status2.p_caption = "0 of " s_files._length() " matched";
    opf_files.top();
@@ -585,9 +331,9 @@ void opf_files.'ENTER'()
 {
    _str name = opf_files.get_current_line();
 
-   // If after stripping path filename remains the same, we should append project directory
-   // to filename as the name is relative to project path. Otherwise we should use the name
-   // as is.
+   // If after stripping path filename remains the same, we should append
+   // project directory to filename as the name is relative to project path.
+   // Otherwise we should use the name as is.
    if ((strip_filename( name, "D" ) == name) || (substr( name, 1, 1 ) :== "."))
    {
       _str proj = _project_get_filename();
@@ -676,7 +422,6 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
          for (i = 0; i < last; ++i)
          {
             entry = &s_entries[s_entries._length()];
-            *entry = null;
             // SlickC bug: I get 'invalid object' error on the following call
             // to set_text() unless I set m_text beforehand.
             entry->m_text = &s_files[i];
