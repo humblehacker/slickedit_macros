@@ -31,7 +31,10 @@
 defeventtab open_project_file;
 _control opf_files;
 
-#define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
+// GLOBALS
+int def_opf_max_show_matches = 100;
+
+const DELETE_TO_END_OF_BUFFER = -2; // used in _editor._delete_text()
 
 static _str s_files[];
 static WeightedEntry s_entries[];
@@ -237,15 +240,21 @@ static void opf_update_files(_str pattern)
       bucketsort(entries);
 
    // add entries to list edit control
-   int offset = 0;
+   boolean capped = false;
+   int offset = 0, count = 0;
    foreach (entry in entries)
    {
       if (entry->m_total_weight || pattern._length()==0)
          add_weighted_entry(*entry, offset);
+      if (++count > def_opf_max_show_matches)
+      {
+         capped = true;
+         break;
+      }
    }
 
    // update status
-   opf_status2.p_caption = entries._length() " of " s_files._length() " matched";
+   opf_status2.p_caption = entries._length() " of " s_files._length() " matched"(capped?" (capped at "def_opf_max_show_matches")":"");
 
    // refresh display
    opf_files.top();
@@ -366,9 +375,9 @@ void opf_timer_cb( int win_id )
    cur_window = p_window_id;
    p_window_id = win_id;
 
-// profile("on");
+   profile("on");
    opf_update_files( opf_file_name.p_caption );
-// profile("view");
+   profile("view");
 
    p_window_id = cur_window;
 }
