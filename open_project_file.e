@@ -46,6 +46,7 @@ class WeightedEntry
    int   m_total_weight = 0;
    _str *m_text;
    int   m_lastslash = 0;
+   int   m_match_start = 0;
 
    WeightedEntry()
    {
@@ -86,7 +87,7 @@ class WeightedEntry
       _str ch;
       int pchpos;
       int chpos, last = m_text->_length();
-      for (chpos = 1; chpos < last; ++chpos)
+      for (chpos = 1; chpos <= last; ++chpos)
       {
          m_intrinsic_char_weight[chpos] = 1;
          pchpos = chpos-1;
@@ -122,6 +123,88 @@ class WeightedEntry
             ++m_char_weight[chpos];
       }
    }
+   boolean weight_exact_match(_str &pattern)
+   {
+      int chpos = pos( pattern, *m_text, m_match_start, 'I' );
+      if (chpos == 0)
+         return false;
+
+      clear_weight();
+      m_match_start = chpos;
+      int last = m_match_start + pattern._length();
+      for (; chpos < last; ++chpos)
+      {
+         weight_char_at_pos(chpos, 2);
+      }
+      return true;
+   }
+   boolean weight_regex_match(_str &pattern, _str &regex)
+   {
+      int chpos = pos( regex, *m_text, m_match_start, 'UI' );
+      if (chpos == 0)
+         return false;
+
+      clear_weight();
+      m_match_start = chpos;
+      _str ch;
+      int i, last = pattern._length();
+      for (i = 1; i <= last; ++i)
+      {
+         ch = substr(pattern, i, 1);
+         chpos = pos(ch, *m_text, chpos, "I");
+         weight_char_at_pos(chpos);
+      }
+      return true;
+   }
+   boolean weight_single_match(_str &pattern, _str &regex)
+   {
+      if (!weight_exact_match(pattern))
+         if (pattern._length() == 1 || // if single char fails, look no further.
+             !weight_regex_match(pattern, regex))
+            return false;
+
+      update_total_weight();
+      return true;
+   }
+   void weight_match(_str &pattern, _str &regex)
+   {
+      int pattern_len = pattern._length();
+      if (pattern_len == 0)
+      {
+         clear_weight();
+         return;
+      }
+
+      int max_weight = 0, max_match_start = 1;
+      m_match_start = 1;
+      loop
+      {
+         if (!weight_single_match(pattern, regex))
+            break;
+
+         if (m_total_weight > max_weight)
+         {
+            max_weight = m_total_weight;
+            max_match_start = m_match_start;
+         }
+         ++m_match_start;
+      }
+
+      if (!max_weight)
+      {
+         clear_weight();
+         return;
+      }
+
+      // Optimization: the last match is most likely to be the heaviest,
+      // so we will only have to go back and re-weigh in rare cases.
+      if (max_weight != m_total_weight)
+      {
+         m_match_start = max_match_start;
+         weight_single_match(pattern, regex);
+      }
+   }
+
 };
 
 static void bucketsort(WeightedEntry* (&entries)[])
@@ -348,71 +431,6 @@ static _str make_regex( _str pattern )
    return lowcase(regex);
 }
 
-static boolean weight_exact_match(_str &pattern, int &match_start, WeightedEntry &curr_entry)
-{
-   int chpos = pos( pattern, *curr_entry.m_text, match_start, 'I' );
-   if (chpos == 0)
-      return false;
-
-   match_start = chpos;
-   int last = match_start + pattern._length();
-   for (; chpos < last; ++chpos)
-   {
-      curr_entry.weight_char_at_pos(chpos, 2);
-   }
-   return true;
-}
-
-static boolean weight_regex_match(_str &pattern, _str &regex, int &match_start, WeightedEntry &curr_entry)
-{
-   int chpos = pos( regex, *curr_entry.m_text, match_start, 'UI' );
-   if (chpos == 0)
-      return false;
-
-   match_start = chpos;
-   _str ch;
-   int i, last = pattern._length();
-   for (i = 1; i <= last; ++i)
-   {
-      ch = substr(pattern, i, 1);
-      chpos = pos(ch, *curr_entry.m_text, chpos, "I");
-      curr_entry.weight_char_at_pos(chpos);
-   }
-   return true;
-}
-
-static void choose_max_entry(WeightedEntry &max_entry, WeightedEntry curr_entry)
-{
-   if (curr_entry.m_total_weight > max_entry.m_total_weight)
-      max_entry = curr_entry;
-}
-
-static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
-{
-   int pattern_len = pattern._length();
-   if (pattern_len == 0)
-   {
-      max_entry.clear_weight();
-      return;
-   }
-
-   int match_start = 1;
-   WeightedEntry curr_entry = max_entry;
-   loop
-   {
-      curr_entry.clear_weight();
-
-      if (!weight_exact_match(pattern, match_start, curr_entry))
-         if (pattern_len == 1 || // if single char fails, look no further.
-            !weight_regex_match(pattern, regex, match_start, curr_entry))
-            break;
-
-      curr_entry.update_total_weight();
-      choose_max_entry(max_entry, curr_entry);
-      ++match_start;
-   }
-}
-
 static void highlight_text(int offset, int len, int color)
 {
    int marker = _StreamMarkerAdd(opf_files, offset, len, false, 0, s_markerType, '');
@@ -456,7 +474,7 @@ static void opf_update_files(_str pattern)
    {
       entry = &s_entries[idx];
 
-      weight_match(pattern, regex, *entry);
+      entry->weight_match(pattern, regex);
 
       if (entry->m_total_weight > 0 || pattern_len == 0)
       {
