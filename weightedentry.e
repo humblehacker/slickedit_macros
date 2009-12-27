@@ -93,13 +93,13 @@ class WeightedEntry
       int i, last = pattern._length();
       for (i = 1; i <= last; ++i)
       {
+         if (chpos > m_text->_length()) return false;
          ch = substr(pattern, i, 1);
          chpos = pos(ch, *m_text, chpos, "I");
-         if (!chpos)
-            return false;
-         if (i == 1)
-            match_start = chpos;
+         if (!chpos) return false;
+         if (i == 1) match_start = chpos;
          matches[matches._length()] = chpos;
+         ++chpos;
       }
 
       // all characters in 'pattern' have been found.
