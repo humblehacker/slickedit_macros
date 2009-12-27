@@ -36,18 +36,33 @@ _control opf_files;
 static _str s_files[];
 static WeightedEntry s_entries[];
 
-static int  s_timer_handle      =  0;
-static int  s_marker_type       = -1;
-static int  s_match_color       = -1;
-static int  s_partialMatchColor = -1;
+static int  s_timer_handle  =  0;
+static int  s_marker_type   = -1;
+static int  s_max_red_index = -1;
+static int  s_red_color[];
 
 definit()
 {
    s_files         = null;
    s_entries       = null;
    s_marker_type   = _MarkerTypeAlloc();
-   s_match_color   = _AllocColor();
-   _default_color( s_match_color, 0xffffff, _rgb(255,128,0), F_BOLD );
+   s_max_red_index = 50;
+
+   int i, min_red = 55;
+   for (i = 0; i < s_max_red_index; ++i)
+   {
+      int redlevel = (i+1)*(256-min_red)/s_max_red_index-1+min_red;
+      dsay("redlevel["i"] = "redlevel);
+      s_red_color[i] = _AllocColor();
+      _default_color( s_red_color[i], 0xffffff, _rgb(redlevel,0,0), F_BOLD );
+   }
+}
+
+static int red_level(int level)
+{
+   if (level > s_max_red_index)
+      level = s_max_red_index;
+   return s_red_color[level];
 }
 
 static void close_form()
@@ -191,7 +206,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
       for (i = 1; i <= last; ++i)
       {
          if (entry.m_char_weight[i])
-            highlight_text(offset+i-1, 1, s_match_color);
+            highlight_text(offset+i-1, 1, red_level(entry.m_char_weight[i]));
       }
    }
 
@@ -213,19 +228,19 @@ static void opf_update_files(_str pattern)
    {
       entry = &s_entries[idx];
       entry->weight_match(pattern);
-      if (entry->m_total_weight > 0 || pattern._length() == 0)
+      if (entry->m_total_weight > 0 || pattern._length()==0)
          entries[entries._length()] = entry;
    }
 
    // sort list by weight
-   if (pattern != '')
+   if (!pattern._length()==0)
       bucketsort(entries);
 
    // add entries to list edit control
    int offset = 0;
    foreach (entry in entries)
    {
-      if (entry->m_total_weight || pattern._isempty())
+      if (entry->m_total_weight || pattern._length()==0)
          add_weighted_entry(*entry, offset);
    }
 
