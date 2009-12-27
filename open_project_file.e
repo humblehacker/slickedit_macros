@@ -1,4 +1,5 @@
 //
+// Copyright (c) 2009      David Whetstone
 // Copyright (c) 2003-2008 Alexander Sandler
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,29 +20,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //
-// 05/11/2008 - Version 1.0.9
-// This version adds _TreeRefresh() call at the end of opf_update_tree(). This fixes
-// a problem with trees in SE that are not automatically updated after a change has
-// been made.
-//
 
 #include "slick.sh"
-#include "form_open_project_file.e"
 #import "editfont.e"
-#include "progress.e"
-#include "weightedentry.e"
+#import "progress.e"
+#import "weightedentry.e"
 
 #pragma option( strict, on )
 
 defeventtab open_project_file;
+_control opf_files;
 
 #define DELETE_TO_END_OF_BUFFER -2 // used in _editor._delete_text()
 
 static _str s_files[];
 static WeightedEntry s_entries[];
 
-static int  opf_filt_font       =  CFG_DIALOG;
-static int  opf_timer_handle    =  0;
+static int  s_timer_handle      =  0;
 static int  s_marker_type       = -1;
 static int  s_match_color       = -1;
 static int  s_partialMatchColor = -1;
@@ -52,7 +47,7 @@ definit()
    s_entries       = null;
    s_marker_type   = _MarkerTypeAlloc();
    s_match_color   = _AllocColor();
-   _default_color( s_match_color,   0xffffff, _rgb(255,128,0),   F_BOLD );
+   _default_color( s_match_color, 0xffffff, _rgb(255,128,0), F_BOLD );
 }
 
 static void close_form()
@@ -138,7 +133,6 @@ static void parse_project( int xml, int index, _str basic_name )
       if (child >= 0)
          parse_project( xml, child, "" );
 
-      idx2 = idx;
       idx = _xmlcfg_get_next_sibling( xml, idx );
    } while (idx >= 0);
 }
@@ -170,10 +164,10 @@ static _str make_regex( _str pattern )
    for (i = 1; i <= last; ++i)
    {
       ch = substr(pattern, i, 1);
-      if (pos( ch, regex_chars ) != 0)
-         regex :+= "\\"; // escape regex characters
+      // escape regex characters
+      if (pos( ch, regex_chars ) != 0) regex :+= "\\";
       regex :+= ch;
-      regex :+= ".*";
+      if (i < last) regex :+= ".*";
    }
    return lowcase(regex);
 }
@@ -211,23 +205,16 @@ static void opf_update_files(_str pattern)
    opf_files._delete_text(DELETE_TO_END_OF_BUFFER);
 
    // build list of WeightedEntrys
-   _str regex = make_regex(pattern);
-   opf_status1.p_caption = regex;
-   int pattern_len = pattern._length();
    WeightedEntry *entries[] = null;
    WeightedEntry *entry;
-   int idx, last_file = 0, last = s_entries._length();
+
+   int idx, last = s_entries._length();
    for (idx = 0; idx < last; ++idx)
    {
       entry = &s_entries[idx];
-
-      entry->weight_match(pattern, regex);
-
-      if (entry->m_total_weight > 0 || pattern_len == 0)
-      {
-         entries[last_file] = entry;
-         ++last_file;
-      }
+      entry->weight_match(pattern);
+      if (entry->m_total_weight > 0 || pattern._length() == 0)
+         entries[entries._length()] = entry;
    }
 
    // sort list by weight
@@ -266,7 +253,7 @@ void open_project_file.on_load()
 
 void opf_file_name.on_create()
 {
-   setEditFont( opf_file_name, opf_filt_font );
+   setEditFont( opf_file_name, CFG_DIALOG );
 }
 
 void opf_files.on_create()
@@ -359,7 +346,7 @@ void opf_timer_cb( int win_id )
 {
    int cur_window;
 
-   _kill_timer( opf_timer_handle );
+   _kill_timer( s_timer_handle );
 
    cur_window = p_window_id;
    p_window_id = win_id;
@@ -374,16 +361,16 @@ void opf_timer_cb( int win_id )
 void open_project_file.'BACKSPACE'()
 {
    opf_file_name.p_caption = substr( opf_file_name.p_caption, 1, length( opf_file_name.p_caption ) - 1 );
-   _kill_timer( opf_timer_handle );
-   opf_timer_handle = _set_timer( 50, opf_timer_cb, p_active_form.p_window_id );
+   _kill_timer( s_timer_handle );
+   s_timer_handle = _set_timer( 50, opf_timer_cb, p_active_form.p_window_id );
 }
 
 void opf_on_key()
 {
    key := event2name( last_event( null, true ) );
    opf_file_name.p_caption = opf_file_name.p_caption""key;
-   _kill_timer( opf_timer_handle );
-   opf_timer_handle = _set_timer( 50, opf_timer_cb, p_active_form.p_window_id );
+   _kill_timer( s_timer_handle );
+   s_timer_handle = _set_timer( 50, opf_timer_cb, p_active_form.p_window_id );
 }
 
 def  'a'-'z'      = opf_on_key;
@@ -400,7 +387,6 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
    if (s_files._isempty())
    {
       _assert(s_entries._isempty());
-      message("loading project paths...");
       int xml_id = 0;
       int no_files = 0;
 
@@ -415,9 +401,9 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
       s_entries = null;
       parse_project( xml_id, no_files, "" );
       s_files._sort('F');
-      WeightedEntry *entry;
-      int i, last = s_files._length();
       {
+         WeightedEntry *entry;
+         int i, last = s_files._length();
          Progress p("Calculating intrinsic weights", last);
          for (i = 0; i < last; ++i)
          {
@@ -430,7 +416,6 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
             p.update(*entry->m_text, i);
          }
          forget_project( xml_id );
-         message("Done.");
       }
    }
 
@@ -440,4 +425,74 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
    show( "-mdi -xy open_project_file" );
 }
 
+_form open_project_file {
+   p_backcolor=0x80000005;
+   p_border_style=BDS_SIZABLE;
+   p_caption='Open Project File';
+   p_clip_controls=false;
+   p_forecolor=0x80000008;
+   p_height=6741;
+   p_width=11210;
+   p_x=1078;
+   p_y=1375;
+   p_eventtab=open_project_file;
+   _label opf_file_name {
+      p_alignment=AL_LEFT;
+      p_auto_size=false;
+      p_backcolor=0x80000008;
+      p_border_style=BDS_SUNKEN;
+      p_caption='';
+      p_font_name='Tahoma';
+      p_forecolor=0x80000008;
+      p_height=234;
+      p_tab_index=2;
+      p_width=11084;
+      p_word_wrap=false;
+      p_x=66;
+      p_y=35;
+   }
+   _editor opf_files {
+      p_auto_size=true;
+      p_backcolor=0x80000005;
+      p_border_style=BDS_FIXED_SINGLE;
+      p_height=2882;
+      p_scroll_bars=SB_BOTH;
+      p_tab_index=3;
+      p_tab_stop=true;
+      p_width=11110;
+      p_x=55;
+      p_y=3542;
+      p_eventtab2=_ul2_editwin;
+   }
+   _label opf_status1 {
+      p_alignment=AL_LEFT;
+      p_auto_size=false;
+      p_backcolor=0x80000008;
+      p_border_style=BDS_NONE;
+      p_caption='';
+      p_font_name='Tahoma';
+      p_forecolor=0x80000008;
+      p_height=234;
+      p_tab_index=2;
+      p_width=5542;
+      p_word_wrap=false;
+      p_x=66;
+      p_y=6424;
+   }
+   _label opf_status2 {
+      p_alignment=AL_LEFT;
+      p_auto_size=false;
+      p_backcolor=0x80000008;
+      p_border_style=BDS_NONE;
+      p_caption='';
+      p_font_name='Tahoma';
+      p_forecolor=0x80000008;
+      p_height=234;
+      p_tab_index=2;
+      p_width=5542;
+      p_word_wrap=false;
+      p_x=5608;
+      p_y=6424;
+   }
+}
 

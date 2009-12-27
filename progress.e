@@ -1,6 +1,6 @@
 #include "slick.sh"
 #import "dlgman.e"
-#import "sc/lang/IControlID.e"
+#require "sc/lang/IControlID.e"
 
 defeventtab wpf_progress;
 
