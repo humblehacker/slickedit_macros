@@ -40,18 +40,19 @@ defeventtab open_project_file;
 
 class WeightedEntry
 {
-   private static WeightedEntry s_mempool[] = null;
+   int   m_intrinsic_char_weight[] = null;
    int   m_char_weight[] = null;
    int   m_total_weight = 0;
    _str *m_text;
    int   m_lastslash = 0;
 
-   WeightedEntry(_str *text = null)
+   WeightedEntry()
+   {
+      m_text = null;
+   }
+   void set_text(_str *text)
    {
       m_text = text;
-   }
-   void update_lastslash()
-   {
       m_lastslash = lastpos(FILESEP, *m_text);
    }
    void clear_weight()
@@ -68,7 +69,7 @@ class WeightedEntry
             m_total_weight += weight;
       }
    }
-   void weight_char_at_pos(int chpos, int multiplier=1)
+   void calc_intrinsic_weights()
    {
       /*
           Each character matched is weighted according to the following heruistics:
@@ -81,47 +82,50 @@ class WeightedEntry
             1 point for any other character.
       */
 
-      _str ch = substr(*m_text, chpos, 1);
-      int pchpos = chpos-1;
-      _str pch = (pchpos) ? substr(*m_text, pchpos, 1) : '';
-      if (chpos == 1 || pch == FILESEP)
-         m_char_weight[chpos] = 4;
-      else if (pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
-         m_char_weight[chpos] = 3;
-      else if (pch == '.')
-         m_char_weight[chpos] = 2;
-      else
-         m_char_weight[chpos] = 1;
+      _str ch;
+      int pchpos;
+      int chpos, last = m_text->_length();
+      for (chpos = 1; chpos < last; ++chpos)
+      {
+         m_intrinsic_char_weight[chpos] = 1;
+         pchpos = chpos-1;
+         _str pch = (pchpos) ? substr(*m_text, pchpos, 1) : '';
+         if (chpos == 1 || pch == FILESEP)
+            m_intrinsic_char_weight[chpos] = 4;
+         else if (pch == '.')
+            m_intrinsic_char_weight[chpos] = 2;
+         else
+         {
+            ch = substr(*m_text, chpos, 1);
+            if (pch == '_' || (pch == lowcase(pch) && ch == upcase(ch)))
+               m_intrinsic_char_weight[chpos] = 3;
+         }
+      }
+   }
+   void weight_char_at_pos(int chpos, int multiplier=1)
+   {
+      m_char_weight[chpos] = m_intrinsic_char_weight[chpos];
+
       if (chpos > m_lastslash)
          m_char_weight[chpos] *= 2;
       m_char_weight[chpos] *= multiplier;
       // give more weight to contiguous blocks
+      int pchpos = chpos - 1;
       if (pchpos && m_char_weight[pchpos] != null &&
           m_char_weight[pchpos] > m_char_weight[chpos])
       {
          ++m_char_weight[chpos];
-         ch = substr(*m_text, chpos+1, 1);
+         _str ch = substr(*m_text, chpos+1, 1);
          // give more weight to last char of contiguous block if at word end
          if (pos("[."FILESEP" ]", ch, 1, "U"))
             ++m_char_weight[chpos];
       }
-   }
-   static WeightedEntry * new(_str *text = null)
-   {
-      WeightedEntry *entry = &s_mempool[s_mempool._length()];
-      entry->m_text = text;
-      return entry;
-   }
-   static void delete_all()
-   {
-      s_mempool = null;
    }
 };
 
 static void bucketsort(WeightedEntry* (&entries)[])
 {
    WeightedEntry* buckets[][];
-   int bucket_last[];
 
    // distribution
    WeightedEntry *entry = null;
@@ -194,6 +198,7 @@ static void swap(WeightedEntry* (&array)[], int a, int b)
 
 
 static _str s_files[];
+static WeightedEntry s_entries[];
 static int  opf_filt_font       =  CFG_DIALOG;
 static int  opf_timer_handle    =  0;
 static int  s_markerType        = -1;
@@ -203,6 +208,7 @@ static int  s_partialMatchColor = -1;
 definit()
 {
    s_files             = null;
+   s_entries           = null;
    s_markerType        = _MarkerTypeAlloc();
    s_exactMatchColor   = _AllocColor();
    s_partialMatchColor = _AllocColor();
@@ -212,13 +218,13 @@ definit()
 
 static void close_form()
 {
-   WeightedEntry.delete_all();
    p_active_form._delete_window();
 }
 
 void _prjupdate_opf()
 {
    s_files = null;
+   s_entries = null;
 }
 
 static int check_for_project()
@@ -384,9 +390,11 @@ static void weight_match(_str &pattern, _str &regex, WeightedEntry &max_entry)
 {
    int pattern_len = pattern._length();
    if (pattern_len == 0)
+   {
+      max_entry.clear_weight();
       return;
+   }
 
-   max_entry.update_lastslash();
    int match_start = 1;
    WeightedEntry curr_entry = max_entry;
    loop
@@ -440,13 +448,12 @@ static void opf_update_files(_str pattern)
    _str regex = make_regex(pattern);
    opf_status1.p_caption = regex;
    int pattern_len = pattern._length();
-   WeightedEntry.delete_all();
    WeightedEntry *entries[] = null;
    WeightedEntry *entry;
-   int idx, last_file = 0, last = s_files._length();
+   int idx, last_file = 0, last = s_entries._length();
    for (idx = 0; idx < last; ++idx)
    {
-      entry = WeightedEntry.new(&s_files[idx]);
+      entry = &s_entries[idx];
 
       weight_match(pattern, regex, *entry);
 
@@ -504,6 +511,7 @@ void opf_files.on_create()
 
    if (s_files._isempty())
    {
+      _assert(s_entries._isempty());
       message("loading project paths...");
       int xml_id = 0;
       int no_files = 0;
@@ -516,12 +524,26 @@ void opf_files.on_create()
 
       no_files = project_find_files( xml_id, 0 );
       s_files = null;
+      s_entries = null;
       parse_project( xml_id, no_files, "" );
       s_files._sort('F');
+      WeightedEntry *entry;
+      int i;
+      for (i = 0; i < s_files._length(); ++i)
+      {
+         entry = &s_entries[s_entries._length()];
+         *entry = null;
+         // SlickC bug: I get 'invalid object' error on the following call
+         // to set_text() unless I set m_text beforehand.
+         entry->m_text = &s_files[i];
+         entry->set_text(&s_files[i]);
+         entry->calc_intrinsic_weights();
+      }
       forget_project( xml_id );
       message("Done.");
    }
 
+   _assert(!s_entries._isempty());
    _assert(!s_files._isempty());
 
    int idx;
