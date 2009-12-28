@@ -61,6 +61,22 @@ definit()
    }
 }
 
+// called when current project is modified
+void _prjupdate_opf()
+{
+   unload_entries();
+}
+
+void _workspace_opened_opf()
+{
+   unload_entries();
+}
+
+void _wkspace_close_opf()
+{
+   unload_entries();
+}
+
 static int red_level(int level)
 {
    if (level > s_max_red_index)
@@ -73,7 +89,7 @@ static void close_form()
    p_active_form._delete_window();
 }
 
-void _prjupdate_opf()
+static void unload_entries()
 {
    s_files = null;
    s_entries = null;
@@ -203,7 +219,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
    opf_files._insert_text(text);
 
    // mark the text
-   if (entry.m_char_weight != null)
+   if (entry.m_total_weight)
    {
       int i, last = entry.m_text->_length();
       for (i = 1; i <= last; ++i)
@@ -246,7 +262,7 @@ static void opf_update_files(_str pattern)
    {
       if (entry->m_total_weight || pattern._length()==0)
          add_weighted_entry(*entry, offset);
-      if (++count > def_opf_max_show_matches)
+      if (++count > def_opf_max_show_matches && pattern._length())
       {
          capped = true;
          break;
@@ -263,15 +279,6 @@ static void opf_update_files(_str pattern)
 
 void open_project_file.on_load()
 {
-   int index;
-
-   // Checking if we have opened project...
-   if (check_for_project() == 0)
-   {
-      _message_box( "Please open project first..." );
-      close_form();
-      return;
-   }
    opf_files._set_focus();
 }
 
@@ -375,9 +382,9 @@ void opf_timer_cb( int win_id )
    cur_window = p_window_id;
    p_window_id = win_id;
 
-   profile("on");
+// profile("on");
    opf_update_files( opf_file_name.p_caption );
-   profile("view");
+// profile("view");
 
    p_window_id = cur_window;
 }
@@ -408,6 +415,13 @@ def  '\'          = opf_on_key;
 
 _command void _open_project_file() name_info( ',' VSARG2_MACRO )
 {
+   // Checking if we have opened project...
+   if (check_for_project() == 0)
+   {
+      _message_box( "Please open project first..." );
+      return;
+   }
+
    if (s_files._isempty())
    {
       _assert(s_entries._isempty());
@@ -432,8 +446,8 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
          for (i = 0; i < last; ++i)
          {
             entry = &s_entries[s_entries._length()];
-            // SlickC bug: I get 'invalid object' error on the following call
-            // to set_text() unless I set m_text beforehand.
+            // SlickC bug: I get 'invalid object' error on the following
+            // set_text() call unless I set m_text beforehand.
             entry->m_text = &s_files[i];
             entry->set_text(&s_files[i]);
             entry->calc_intrinsic_weights();
