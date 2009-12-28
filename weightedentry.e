@@ -7,7 +7,6 @@ class WeightedEntry
    int   m_total_weight = 0;
    _str *m_text;
    int   m_lastslash = 0;
-   int   m_match_start = 0;
 
    WeightedEntry()
    {
@@ -16,6 +15,7 @@ class WeightedEntry
 
    void set_text(_str *text)
    {
+      m_text = null;
       m_text = text;
       m_lastslash = lastpos(FILESEP, *m_text);
    }
@@ -64,7 +64,7 @@ class WeightedEntry
       }
    }
 
-   int weight_char_at_pos(int chpos)
+   private int weight_char_at_pos(int chpos)
    {
       m_char_weight[chpos] = m_intrinsic_char_weight[chpos];
 
@@ -82,72 +82,35 @@ class WeightedEntry
       return m_char_weight[chpos];
    }
 
-   boolean weight_single_match(_str &pattern, int match_start)
+   void weight_match(_str pattern)
    {
-      // find 'pattern' in 'm_text', and store indices of matching
-      // characters in 'matches'. Can't change any state
-      // unless all characters in 'pattern' have been found.
+      clear_weight();
+
+      if (pattern._length() == 0) return;
+
+      // find 'pattern' in 'm_text', and store indices of
+      // matching characters in 'matches'.
       int matches[];
-      int chpos = match_start;
+      int chpos = m_text->_length();
       _str ch;
-      int i, last = pattern._length();
-      for (i = 1; i <= last; ++i)
+      int i;
+      for (i = pattern._length(); i >= 1; --i)
       {
-         if (chpos > m_text->_length()) return false;
+         if (chpos < 1) return;
          ch = substr(pattern, i, 1);
-         chpos = pos(ch, *m_text, chpos, "I");
-         if (!chpos) return false;
-         if (i == 1) match_start = chpos;
-         matches[matches._length()] = chpos;
-         ++chpos;
+         chpos = lastpos(ch, *m_text, chpos, "I");
+         if (!chpos) return;
+         matches[i] = chpos;
+         --chpos;
       }
 
       // all characters in 'pattern' have been found.
       // Calculate the weights and update the state.
-      clear_weight();
-      m_match_start = match_start;
       int match;
       foreach (match in matches)
          m_total_weight += weight_char_at_pos(match);
 
-      return true;
-   }
-
-   void weight_match(_str &pattern)
-   {
-      if (pattern._length() == 0)
-      {
-         clear_weight();
-         return;
-      }
-
-      int max_weight = 0, max_match_start = 1;
-      int match_start = 1;
-      loop
-      {
-         if (!weight_single_match(pattern, match_start))
-            break;
-
-         if (m_total_weight > max_weight)
-         {
-            max_weight = m_total_weight;
-            max_match_start = m_match_start;
-         }
-         match_start = m_match_start+1;
-      }
-
-      if (!max_weight)
-      {
-         clear_weight();
-         return;
-      }
-
-      // Optimization: the last match is most likely to be the heaviest,
-      // so we will only have to go back and re-weigh in rare cases.
-      if (max_weight != m_total_weight)
-      {
-         weight_single_match(pattern, max_match_start);
-      }
+      return;
    }
 };
 
@@ -166,8 +129,6 @@ void bucketsort(WeightedEntry* (&entries)[])
    entries = null;
 
    // aggregation
-   int last_entry = 0;
-   WeightedEntry* bucket[];
    int i;
    for (i = buckets._length(); i >= 0; --i)
    {
@@ -177,5 +138,4 @@ void bucketsort(WeightedEntry* (&entries)[])
       }
    }
 }
-
 
