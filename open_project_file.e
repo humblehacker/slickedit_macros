@@ -25,14 +25,12 @@
 #import "editfont.e"
 #import "progress.e"
 #import "weightedentry.e"
+#require "open_project_file_settings.e"
 
 #pragma option( strict, on )
 
 defeventtab open_project_file;
 _control opf_files;
-
-// GLOBALS
-int def_opf_max_show_matches = 100;
 
 const DELETE_TO_END_OF_BUFFER = -2; // used in _editor._delete_text()
 
@@ -287,11 +285,49 @@ void opf_file_name.on_create()
    setEditFont( opf_file_name, CFG_DIALOG );
 }
 
+void opf_settings.on_create()
+{
+   _str dir = get_env("SLICKEDITCONFIGVERSION");
+   _str filename = dir"gear.bmp";
+   int index = _update_picture(-1, bitmap_path_search(filename));
+   if (index < 0)
+   {
+      if (index == FILE_NOT_FOUND_RC)
+      {
+         _message_box("Picture "filename" was not found");
+      }
+      else
+      {
+         _message_box("Error loading picture "filename"\n\n"get_message(index));
+      }
+      return;
+   }
+   p_picture=index;
+   p_message="Launches configuration dialog";
+   p_style=PSPIC_FLAT_BUTTON;
+}
+
+static void update_scrollbars()
+{
+   if (def_opf_show_horz_scrollbar)
+   {
+      if (def_opf_show_vert_scrollbar)
+         opf_files.p_scroll_bars = SB_BOTH;
+      else
+         opf_files.p_scroll_bars = SB_HORIZONTAL;
+   }
+   else if (def_opf_show_vert_scrollbar)
+      opf_files.p_scroll_bars = SB_VERTICAL;
+   else
+      opf_files.p_scroll_bars = SB_NONE;
+}
+
 void opf_files.on_create()
 {
    p_line_numbers_len = 0;
    p_KeepPictureGutter = false;
    p_readonly_mode = true;
+   update_scrollbars();
 
    foreach (auto file in s_files)
    {
@@ -305,9 +341,12 @@ void opf_files.on_create()
 void open_project_file.on_resize()
 {
    /*
-          +--------------------------------+
-          |          opf_file_name         |   } fixed height
-          +--------------------------------+
+                                         +-- opf_settings
+                                         |
+                                         v
+          +----------------------------+---+
+          |          opf_file_name     |   |   } fixed height
+          +----------------------------+---+
           |                                |   \
           |                                |    |
           |            opf_files           |    |  variable height
@@ -331,18 +370,29 @@ void open_project_file.on_resize()
 
    // Calculate horizontal dimensions
    opf_files.p_width     = clientwidth - hpad * 2;
-   opf_file_name.p_width = opf_files.p_width + fnpad;
-   opf_status1.p_width   = (opf_files.p_width * 2/3) - hpad;
+   opf_file_name.p_width = opf_files.p_width - opf_settings.p_width - hpad;
+   opf_settings.p_x      = opf_file_name.p_x + opf_file_name.p_width + hpad;
+   opf_status1.p_x       = opf_files.p_x;
+   opf_status1.p_width   = (opf_files.p_width * 1/2) - hpad;
    opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
-   opf_status2.p_x       = opf_status1.p_width + hpad * 2;
+   opf_status2.p_x       = opf_status1.p_x + opf_status1.p_width;
 
    // Calculate vertical dimensions
-   opf_files.p_height = clientheight - (vpad * 4 +
-                                        opf_file_name.p_height +
-                                        opf_status1.p_height);
-   opf_files.p_y      = opf_file_name.p_y + opf_file_name.p_height + vpad;
-   opf_status1.p_y    = opf_files.p_y + opf_files.p_height + vpad;
-   opf_status2.p_y    = opf_status1.p_y;
+   opf_settings.p_y      = opf_file_name.p_y;
+   opf_files.p_height    = clientheight - (vpad * 4 +
+                                           opf_file_name.p_height +
+                                           opf_status1.p_height);
+   opf_files.p_y         = opf_file_name.p_y + opf_file_name.p_height + vpad;
+   opf_status1.p_y       = opf_files.p_y + opf_files.p_height + vpad;
+   opf_status2.p_y       = opf_status1.p_y;
+
+   p_active_form.p_height = opf_status1.p_y + opf_status1.p_height + vpad;
+}
+
+void opf_settings.lbutton_up()
+{
+   show("-modal open_project_file_settings");
+   update_scrollbars();
 }
 
 void opf_files.'ENTER'()
@@ -469,10 +519,10 @@ _form open_project_file {
    p_caption='Open Project File';
    p_clip_controls=false;
    p_forecolor=0x80000008;
-   p_height=6741;
-   p_width=11210;
-   p_x=1078;
-   p_y=1375;
+   p_height=6369;
+   p_width=8690;
+   p_x=3674;
+   p_y=1441;
    p_eventtab=open_project_file;
    _label opf_file_name {
       p_alignment=AL_LEFT;
@@ -482,55 +532,74 @@ _form open_project_file {
       p_caption='';
       p_font_name='Tahoma';
       p_forecolor=0x80000008;
-      p_height=234;
+      p_height=229;
       p_tab_index=2;
-      p_width=11084;
+      p_width=8272;
       p_word_wrap=false;
       p_x=66;
       p_y=35;
+   }
+   _image opf_settings {
+      p_auto_size=true;
+      p_backcolor=0x80000005;
+      p_border_style=BDS_NONE;
+      p_forecolor=0x80000008;
+      p_height=297;
+      p_max_click=MC_SINGLE;
+      p_Nofstates=1;
+//    p_picture='gear.bmp';
+      p_stretch=false;
+      p_style=PSPIC_BUTTON;
+      p_tab_index=1;
+      p_value=0;
+      p_width=297;
+      p_x=1859;
+      p_y=1562;
+      p_eventtab2=_ul2_imageb;
    }
    _editor opf_files {
       p_auto_size=true;
       p_backcolor=0x80000005;
       p_border_style=BDS_FIXED_SINGLE;
-      p_height=2882;
+      p_height=5698;
       p_scroll_bars=SB_BOTH;
       p_tab_index=3;
       p_tab_stop=true;
-      p_width=11110;
+      p_width=8580;
       p_x=55;
-      p_y=3542;
+      p_y=297;
       p_eventtab2=_ul2_editwin;
    }
    _label opf_status1 {
       p_alignment=AL_LEFT;
       p_auto_size=false;
       p_backcolor=0x80000008;
-      p_border_style=BDS_NONE;
+      p_border_style=BDS_SUNKEN;
       p_caption='';
       p_font_name='Tahoma';
       p_forecolor=0x80000008;
-      p_height=234;
+      p_height=231;
       p_tab_index=2;
-      p_width=5542;
+      p_width=4554;
       p_word_wrap=false;
-      p_x=66;
-      p_y=6424;
+      p_x=55;
+      p_y=6061;
    }
    _label opf_status2 {
       p_alignment=AL_LEFT;
       p_auto_size=false;
       p_backcolor=0x80000008;
-      p_border_style=BDS_NONE;
+      p_border_style=BDS_SUNKEN;
       p_caption='';
       p_font_name='Tahoma';
       p_forecolor=0x80000008;
-      p_height=234;
+      p_height=231;
       p_tab_index=2;
-      p_width=5542;
+      p_width=4015;
       p_word_wrap=false;
-      p_x=5608;
-      p_y=6424;
+      p_x=4620;
+      p_y=6061;
    }
 }
+
 
