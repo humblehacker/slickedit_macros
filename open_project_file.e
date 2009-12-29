@@ -341,23 +341,23 @@ void opf_files.on_create()
 void open_project_file.on_resize()
 {
    /*
-                                         +-- opf_settings
-                                         |
-                                         v
-          +----------------------------+---+
-          |          opf_file_name     |   |   } fixed height
-          +----------------------------+---+
-          |                                |   \
-          |                                |    |
-          |            opf_files           |    |  variable height
-          |                                |    |
-          |                                |   /
-          +--------------------+-----------+
-          |    opf_status1     |opf_status2|   } fixed height
-          +--------------------+-----------+
+                                        +-- opf_settings
+                                        |
+                                        v
+          +---------------------------+---+
+          |         opf_file_name     |   |   } fixed height
+          +---------------------------+---+
+          |                               |   \
+          |                               |    |
+          |           opf_files           |    |  variable height
+          |                               |    |
+          |                               |   /
+          +---------------+---------------+
+          |  opf_status1  |  opf_status2  |   } fixed height
+          +---------------+---------------+
 
-           \__________________/ \_________/
-                2/3 width        1/3 width
+           \_____________/ \_____________/
+              1/2 width       1/2 width
    */
 
    int clientwidth  = p_active_form.p_width;
@@ -369,23 +369,25 @@ void open_project_file.on_resize()
    // the outer border. Hence, the extra 20 units.
 
    // Calculate horizontal dimensions
-   opf_files.p_width     = clientwidth - hpad * 2;
+   opf_files.p_width     = clientwidth - 2*hpad;
    opf_file_name.p_width = opf_files.p_width - opf_settings.p_width - hpad;
    opf_settings.p_x      = opf_file_name.p_x + opf_file_name.p_width + hpad;
    opf_status1.p_x       = opf_files.p_x;
-   opf_status1.p_width   = (opf_files.p_width * 1/2) - hpad;
+   opf_status1.p_width   = (opf_files.p_width/2) - hpad;
    opf_status2.p_width   = opf_files.p_width - opf_status1.p_width;
    opf_status2.p_x       = opf_status1.p_x + opf_status1.p_width;
 
    // Calculate vertical dimensions
-   opf_settings.p_y      = opf_file_name.p_y;
-   opf_files.p_height    = clientheight - (vpad * 4 +
-                                           opf_file_name.p_height +
-                                           opf_status1.p_height);
+   opf_settings.p_y      = ((opf_file_name.p_height + 2*vpad) - opf_settings.p_height)/2;
+   opf_files.p_height    = clientheight -
+                           (4*vpad + opf_file_name.p_height + opf_status1.p_height);
    opf_files.p_y         = opf_file_name.p_y + opf_file_name.p_height + vpad;
    opf_status1.p_y       = opf_files.p_y + opf_files.p_height + vpad;
    opf_status2.p_y       = opf_status1.p_y;
 
+   // Since opf_files.p_height will always be an even multiple of its line height,
+   // the form may have extra blank space below the bottom-most controls.
+   // Here we eliminate that extra space.
    p_active_form.p_height = opf_status1.p_y + opf_status1.p_height + vpad;
 }
 
