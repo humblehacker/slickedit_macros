@@ -36,10 +36,11 @@ const DELETE_TO_END_OF_BUFFER = -2; // used in _editor._delete_text()
 
 static _str s_files[];
 static WeightedEntry s_entries[];
-
-static int  s_timer_handle  =  0;
-static int  s_marker_type   = -1;
 static int  s_weight_color[];
+
+static int s_max_path_length =  0;
+static int s_timer_handle    =  0;
+static int s_marker_type     = -1;
 
 definit()
 {
@@ -201,20 +202,46 @@ static void highlight_text(int offset, int len, int color)
    _StreamMarkerSetTextColor( marker, color );
 }
 
+static _str format_entry(WeightedEntry &entry)
+{
+   _str text = *entry.m_text;
+   if (def_opf_file_first)
+   {
+      _str path = substr(text, 1, entry.m_lastslash);
+      _str filename = substr(text, entry.m_lastslash+1);
+      text = substr(filename, 1, s_max_path_length)""path;
+   }
+   text :+= "\n";
+   return text;
+}
+
 static void add_weighted_entry(WeightedEntry &entry, int &offset)
 {
    // add the text
-   _str text = *entry.m_text"\n";
+   _str text = format_entry(entry);
    opf_files._insert_text(text);
 
    // mark the text
    if (entry.m_total_weight)
    {
-      int i, last = entry.m_text->_length();
+      int weight_index;
+      int i, last = text._length()-1;
       for (i = 1; i <= last; ++i)
       {
-         if (entry.m_char_weight[i])
-            highlight_text(offset+i-1, 1, weight_color(entry.m_char_weight[i]));
+         weight_index = i;
+         if (def_opf_file_first)
+         {
+            if (i < s_max_path_length)
+            {   
+               if (i > entry.m_text->_length() - entry.m_lastslash)
+                  continue;
+               weight_index += entry.m_lastslash;
+            }
+            else
+               weight_index -= s_max_path_length;
+         }
+         if (entry.m_char_weight[weight_index])
+            highlight_text(offset+i-1, 1, weight_color(entry.m_char_weight[weight_index]));
       }
    }
 
@@ -356,9 +383,13 @@ void opf_files.on_create()
    update_colors();
    update_scrollbars();
 
-   foreach (auto file in s_files)
+   WeightedEntry *entry;
+   int idx;
+   for (idx = 1; idx < s_entries._length(); ++idx)
    {
-      opf_files._insert_text(file"\n");
+      entry = &s_entries[idx];
+      _str text = format_entry(*entry);
+      opf_files._insert_text(text);
    }
    opf_status2.p_caption = "0 of " s_files._length() " matched";
    opf_files.top();
@@ -519,6 +550,7 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
       no_files = project_find_files( xml_id, 0 );
       s_files = null;
       s_entries = null;
+      s_max_path_length = 0;
       parse_project( xml_id, no_files, "" );
       s_files._sort('F');
       {
@@ -533,6 +565,8 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
             entry->m_text = &s_files[i];
             entry->set_text(&s_files[i]);
             entry->calc_intrinsic_weights();
+            s_max_path_length = max((entry->m_text->_length() - entry->m_lastslash)+2, 
+                                    s_max_path_length);
             p.update(*entry->m_text, i);
          }
          forget_project( xml_id );
@@ -544,6 +578,7 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
 
    show( "-mdi -xy open_project_file" );
 }
+
 
 
 _form open_project_file {
@@ -634,4 +669,3 @@ _form open_project_file {
       p_y=6061;
    }
 }
-

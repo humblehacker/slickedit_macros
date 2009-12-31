@@ -13,10 +13,19 @@ int def_opf_foreground_min      = RGB(0xff,0xff,0xff);
 int def_opf_foreground_max      = RGB(0x00,0x00,0x00);
 int def_opf_background_min      = RGB(0x30,0xff,0xff);
 int def_opf_background_max      = RGB(0xff,0xff,0xff);
+int def_opf_file_first          = 1;
 
-void opfs_cap.on_create()
+void opfs_ok.on_create()
 {
-   p_text = def_opf_max_show_matches;
+   opfs_cap.p_text                 = def_opf_max_show_matches;
+   opfs_file_first.p_value         = def_opf_file_first;
+   opfs_path_first.p_value         = def_opf_file_first ? 0 : 1;
+   opfs_show_horz.p_value          = def_opf_show_horz_scrollbar;
+   opfs_show_vert.p_value          = def_opf_show_vert_scrollbar;
+   opfs_foreground_min.p_backcolor = def_opf_foreground_min;
+   opfs_foreground_max.p_backcolor = def_opf_foreground_max;
+   opfs_background_min.p_backcolor = def_opf_background_min;
+   opfs_background_max.p_backcolor = def_opf_background_max;
 }
 
 void opfs_ok.lbutton_up()
@@ -25,36 +34,6 @@ void opfs_ok.lbutton_up()
    def_opf_show_horz_scrollbar = opfs_show_horz.p_value;
    def_opf_show_vert_scrollbar = opfs_show_vert.p_value;
    p_active_form._delete_window();
-}
-
-void opfs_show_horz.on_create()
-{
-   p_value = def_opf_show_horz_scrollbar;
-}
-
-void opfs_show_vert.on_create()
-{
-   p_value = def_opf_show_vert_scrollbar;
-}
-
-void opfs_foreground_min.on_create()
-{
-   p_backcolor = def_opf_foreground_min;
-}
-
-void opfs_foreground_max.on_create()
-{
-   p_backcolor = def_opf_foreground_max;
-}
-
-void opfs_background_min.on_create()
-{
-   p_backcolor = def_opf_background_min;
-}
-
-void opfs_background_max.on_create()
-{
-   p_backcolor = def_opf_background_max;
 }
 
 void opfs_foreground_min.lbutton_up()
@@ -85,16 +64,21 @@ void opfs_background_max.lbutton_up()
       p_backcolor = def_opf_background_max = color;
 }
 
+void opfs_file_first.lbutton_up()
+{
+   def_opf_file_first = opfs_file_first.p_value;
+}
+
 _form open_project_file_settings {
    p_backcolor=0x80000005;
    p_border_style=BDS_DIALOG_BOX;
    p_caption='Open project file - Settings';
    p_clip_controls=false;
    p_forecolor=0x80000008;
-   p_height=4452;
-   p_width=4134;
-   p_x=2288;
-   p_y=1078;
+   p_height=2982;
+   p_width=7904;
+   p_x=1053;
+   p_y=1484;
    _frame opfs_opt_frame {
       p_backcolor=0x80000005;
       p_caption='Optimization';
@@ -103,8 +87,8 @@ _form open_project_file_settings {
       p_height=1320;
       p_tab_index=1;
       p_width=4026;
-      p_x=55;
-      p_y=55;
+      p_x=3783;
+      p_y=56;
       _text_box opfs_cap {
          p_auto_size=true;
          p_backcolor=0x80000005;
@@ -171,8 +155,8 @@ _form open_project_file_settings {
       p_tab_index=9;
       p_tab_stop=true;
       p_width=836;
-      p_x=2120;
-      p_y=4045;
+      p_x=5968;
+      p_y=2576;
    }
    _command_button opfs_cancel {
       p_cancel=true;
@@ -182,8 +166,8 @@ _form open_project_file_settings {
       p_tab_index=10;
       p_tab_stop=true;
       p_width=781;
-      p_x=3077;
-      p_y=4045;
+      p_x=6925;
+      p_y=2576;
    }
    _frame opfs_scrollbar_frame {
       p_backcolor=0x80000005;
@@ -193,8 +177,8 @@ _form open_project_file_settings {
       p_height=869;
       p_tab_index=12;
       p_width=4026;
-      p_x=52;
-      p_y=3066;
+      p_x=3783;
+      p_y=1442;
       _check_box opfs_show_horz {
          p_alignment=AL_LEFT;
          p_backcolor=0x80000005;
@@ -226,14 +210,14 @@ _form open_project_file_settings {
    }
    _frame opfs_color_frame {
       p_backcolor=0x80000005;
-      p_caption='Highlight colors';
+      p_caption='Display';
       p_clip_controls=true;
       p_forecolor=0x80000008;
-      p_height=1554;
+      p_height=2814;
       p_tab_index=13;
-      p_width=4030;
-      p_x=65;
-      p_y=1442;
+      p_width=3601;
+      p_x=117;
+      p_y=56;
       _picture_box opfs_background_min {
          p_auto_size=true;
          p_backcolor=0x80000005;
@@ -250,7 +234,7 @@ _form open_project_file_settings {
          p_value=0;
          p_width=352;
          p_x=1926;
-         p_y=1063;
+         p_y=2365;
          p_eventtab2=_ul2_picture;
       }
       _picture_box opfs_foreground_max {
@@ -269,7 +253,7 @@ _form open_project_file_settings {
          p_value=0;
          p_width=352;
          p_x=2885;
-         p_y=630;
+         p_y=1932;
          p_eventtab2=_ul2_picture;
       }
       _picture_box opfs_foreground_min {
@@ -288,7 +272,7 @@ _form open_project_file_settings {
          p_value=0;
          p_width=352;
          p_x=1926;
-         p_y=630;
+         p_y=1932;
          p_eventtab2=_ul2_picture;
       }
       _label ctllabel1 {
@@ -302,8 +286,8 @@ _form open_project_file_settings {
          p_tab_index=3;
          p_width=957;
          p_word_wrap=false;
-         p_x=187;
-         p_y=643;
+         p_x=299;
+         p_y=1945;
       }
       _label ctllabel2 {
          p_alignment=AL_LEFT;
@@ -316,8 +300,8 @@ _form open_project_file_settings {
          p_tab_index=4;
          p_width=957;
          p_word_wrap=false;
-         p_x=187;
-         p_y=1063;
+         p_x=299;
+         p_y=2365;
       }
       _label ctllabel4 {
          p_alignment=AL_CENTER;
@@ -331,7 +315,7 @@ _form open_project_file_settings {
          p_width=357;
          p_word_wrap=false;
          p_x=1924;
-         p_y=294;
+         p_y=1596;
       }
       _picture_box opfs_background_max {
          p_auto_size=true;
@@ -349,7 +333,7 @@ _form open_project_file_settings {
          p_value=0;
          p_width=352;
          p_x=2885;
-         p_y=1063;
+         p_y=2365;
          p_eventtab2=_ul2_picture;
       }
       _label ctllabel4 {
@@ -364,7 +348,62 @@ _form open_project_file_settings {
          p_width=351;
          p_word_wrap=false;
          p_x=2886;
+         p_y=1596;
+      }
+      _radio_button opfs_file_first {
+         p_alignment=AL_LEFT;
+         p_backcolor=0x80000005;
+         p_caption='filename first (e.g. ''file.ext    path/to/the'')';
+         p_forecolor=0x80000008;
+         p_height=238;
+         p_tab_index=8;
+         p_tab_stop=true;
+         p_value=0;
+         p_width=3185;
+         p_x=299;
+         p_y=602;
+      }
+      _radio_button opfs_path_first {
+         p_alignment=AL_LEFT;
+         p_backcolor=0x80000005;
+         p_caption='path first (e.g. ''path/to/the/file.ext'')';
+         p_forecolor=0x80000008;
+         p_height=238;
+         p_tab_index=9;
+         p_tab_stop=true;
+         p_value=0;
+         p_width=3185;
+         p_x=299;
+         p_y=966;
+         p_eventtab=open_project_file_settings.opfs_file_first;
+      }
+      _label ctllabel5 {
+         p_alignment=AL_LEFT;
+         p_auto_size=false;
+         p_backcolor=0x80000005;
+         p_border_style=BDS_NONE;
+         p_caption='Show entries as:';
+         p_forecolor=0x80000008;
+         p_height=252;
+         p_tab_index=10;
+         p_width=1378;
+         p_word_wrap=false;
+         p_x=187;
          p_y=294;
+      }
+      _label ctllabel6 {
+         p_alignment=AL_LEFT;
+         p_auto_size=false;
+         p_backcolor=0x80000005;
+         p_border_style=BDS_NONE;
+         p_caption='Highlight colors';
+         p_forecolor=0x80000008;
+         p_height=308;
+         p_tab_index=11;
+         p_width=1373;
+         p_word_wrap=false;
+         p_x=187;
+         p_y=1428;
       }
    }
 }
