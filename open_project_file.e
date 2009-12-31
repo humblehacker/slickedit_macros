@@ -22,9 +22,9 @@
 //
 
 #include "slick.sh"
-#import "editfont.e"
-#import "progress.e"
-#import "weightedentry.e"
+#require "editfont.e"
+#require "progress.e"
+#require "weightedentry.e"
 #require "open_project_file_settings.e"
 
 #pragma option( strict, on )
@@ -39,24 +39,15 @@ static WeightedEntry s_entries[];
 
 static int  s_timer_handle  =  0;
 static int  s_marker_type   = -1;
-static int  s_max_red_index = -1;
-static int  s_red_color[];
+static int  s_weight_color[];
 
 definit()
 {
    s_files         = null;
    s_entries       = null;
    s_marker_type   = _MarkerTypeAlloc();
-   s_max_red_index = 50;
 
-   int i, min_red = 55;
-   for (i = 0; i < s_max_red_index; ++i)
-   {
-      int redlevel = (i+1)*(256-min_red)/s_max_red_index-1+min_red;
-      dsay("redlevel["i"] = "redlevel);
-      s_red_color[i] = _AllocColor();
-      _default_color( s_red_color[i], 0xffffff, _rgb(redlevel,0,0), F_BOLD );
-   }
+   update_colors();
 }
 
 // called when current project is modified
@@ -75,11 +66,11 @@ void _wkspace_close_opf()
    unload_entries();
 }
 
-static int red_level(int level)
+static int weight_color(int level)
 {
-   if (level > s_max_red_index)
-      level = s_max_red_index;
-   return s_red_color[level];
+   if (level > def_opf_max_weight)
+      level = def_opf_max_weight;
+   return s_weight_color[level-1];
 }
 
 static void close_form()
@@ -223,7 +214,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
       for (i = 1; i <= last; ++i)
       {
          if (entry.m_char_weight[i])
-            highlight_text(offset+i-1, 1, red_level(entry.m_char_weight[i]));
+            highlight_text(offset+i-1, 1, weight_color(entry.m_char_weight[i]));
       }
    }
 
@@ -322,11 +313,47 @@ static void update_scrollbars()
       opf_files.p_scroll_bars = SB_NONE;
 }
 
+#define GET_RGB(color,r,g,b)     \
+   r = (color) & 0x0ff;          \
+   g = ((color) >> 8) & 0x0ff;   \
+   b = ((color) >> 16) & 0x0ff
+
+#define MAP_WEIGHT_TO_COLOR(weight,max_color,min_color) \
+   (weight+1)*(max_color-min_color)/(def_opf_max_weight)+min_color
+
+static void update_colors()
+{
+   int r, g, b;
+   int fore_min_r, fore_min_g, fore_min_b;
+   int fore_max_r, fore_max_g, fore_max_b;
+   int back_min_r, back_min_g, back_min_b;
+   int back_max_r, back_max_g, back_max_b;
+   int foreground, background;
+   GET_RGB(def_opf_foreground_min, fore_min_r, fore_min_g, fore_min_b);
+   GET_RGB(def_opf_foreground_max, fore_max_r, fore_max_g, fore_max_b);
+   GET_RGB(def_opf_background_min, back_min_r, back_min_g, back_min_b);
+   GET_RGB(def_opf_background_max, back_max_r, back_max_g, back_max_b);
+   int i;
+   for (i = 0; i < def_opf_max_weight; ++i)
+   {
+      foreground = _rgb(MAP_WEIGHT_TO_COLOR(i, fore_min_r, fore_max_r),
+                        MAP_WEIGHT_TO_COLOR(i, fore_min_g, fore_max_g),
+                        MAP_WEIGHT_TO_COLOR(i, fore_min_b, fore_max_b));
+      background = _rgb(MAP_WEIGHT_TO_COLOR(i, back_min_r, back_max_r),
+                        MAP_WEIGHT_TO_COLOR(i, back_min_g, back_max_g),
+                        MAP_WEIGHT_TO_COLOR(i, back_min_b, back_max_b));
+      s_weight_color[i] = _AllocColor();
+      _default_color( s_weight_color[i], foreground, background, F_BOLD );
+   }
+}
+
 void opf_files.on_create()
 {
    p_line_numbers_len = 0;
    p_KeepPictureGutter = false;
    p_readonly_mode = true;
+   p_color_flags = 0;
+   update_colors();
    update_scrollbars();
 
    foreach (auto file in s_files)
@@ -395,6 +422,9 @@ void opf_settings.lbutton_up()
 {
    show("-modal open_project_file_settings");
    update_scrollbars();
+   opf_files.update_colors();
+   // force update the display
+   opf_timer_cb(p_active_form.p_window_id);
 }
 
 void opf_files.'ENTER'()
@@ -515,6 +545,7 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
    show( "-mdi -xy open_project_file" );
 }
 
+
 _form open_project_file {
    p_backcolor=0x80000005;
    p_border_style=BDS_SIZABLE;
@@ -549,7 +580,7 @@ _form open_project_file {
       p_height=297;
       p_max_click=MC_SINGLE;
       p_Nofstates=1;
-//    p_picture='gear.bmp';
+      p_picture='';
       p_stretch=false;
       p_style=PSPIC_BUTTON;
       p_tab_index=1;
@@ -603,5 +634,4 @@ _form open_project_file {
       p_y=6061;
    }
 }
-
 
