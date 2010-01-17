@@ -232,7 +232,7 @@ static void add_weighted_entry(WeightedEntry &entry, int &offset)
          if (def_opf_file_first)
          {
             if (i < s_max_path_length)
-            {   
+            {
                if (i > entry.m_text->_length() - entry.m_lastslash)
                   continue;
                weight_index += entry.m_lastslash;
@@ -462,6 +462,13 @@ void opf_files.'ENTER'()
 {
    _str name = opf_files.get_current_line();
 
+   if (def_opf_file_first)
+   {
+      _str path = substr(name, s_max_path_length+1);
+      _str file = substr(name, 1, s_max_path_length);
+      name = strip(path :+ file);
+   }
+
    // If after stripping path filename remains the same, we should append
    // project directory to filename as the name is relative to project path.
    // Otherwise we should use the name as is.
@@ -565,7 +572,7 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
             entry->m_text = &s_files[i];
             entry->set_text(&s_files[i]);
             entry->calc_intrinsic_weights();
-            s_max_path_length = max((entry->m_text->_length() - entry->m_lastslash)+2, 
+            s_max_path_length = max((entry->m_text->_length() - entry->m_lastslash)+2,
                                     s_max_path_length);
             p.update(*entry->m_text, i);
          }
