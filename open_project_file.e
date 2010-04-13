@@ -555,6 +555,12 @@ _command void _open_project_file() name_info( ',' VSARG2_MACRO )
       }
 
       no_files = project_find_files( xml_id, 0 );
+      if (no_files == 0)
+      {
+         _message_box( "Project is empty." );
+         return;
+      }
+
       s_files = null;
       s_entries = null;
       s_max_path_length = 0;
